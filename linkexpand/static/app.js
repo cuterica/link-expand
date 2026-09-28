@@ -199,7 +199,7 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
     $('merge-component').textContent = capabilities.ffmpeg ? 'HLS / DASH 合并组件：已就绪' : 'HLS / DASH 合并需要免费的 FFmpeg；文件和普通视频直链不需要。';
     clipboardReady = true;
     $('copy-hint').textContent = nativeRich
-      ? 'Windows 图文复制已启用：右侧一次复制图片、标题、摘要与真实链接。'
+      ? `${capabilities.platform==='darwin'?'macOS':'Windows'} 图文复制已启用：右侧一次复制图片、标题、摘要与真实链接。`
       : '图文复制已启用：右侧包含图片和可点击链接，适用于支持富文本的粘贴目标。';
     setBusy(busy);
     $('video-download').disabled = !(downloadCatalog?.resources?.length || current?.videos?.length);

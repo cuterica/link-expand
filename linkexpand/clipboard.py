@@ -6,6 +6,7 @@ from html import escape
 import os
 from pathlib import Path
 import struct
+import sys
 import threading
 import time
 
@@ -21,12 +22,15 @@ def file_drop_payload(path: Path) -> bytes:
 
 
 def copy_video_file(path: Path):
-    if os.name != 'nt':
-        raise PreviewError('复制视频文件需要 Windows；当前系统请从下载文件夹分享视频。')
+    if os.name != 'nt' and sys.platform != 'darwin':
+        raise PreviewError('当前系统请从下载文件夹分享完整文件。')
     if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 500_000_000:
         raise PreviewError('视频文件不存在或超过 500 MB，请重新下载。')
     with LOCK:
-        set_formats([(15, file_drop_payload(path))])
+        if sys.platform=='darwin':
+            from .macos_clipboard import copy_file
+            copy_file(path)
+        else:set_formats([(15, file_drop_payload(path))])
 
 
 def cf_html(fragment: str, source_url: str) -> bytes:
@@ -114,23 +118,28 @@ def set_formats(payloads):
 
 
 def copy_rich(record, key: str):
-    if os.name != 'nt':
+    if os.name != 'nt' and sys.platform != 'darwin':
         raise PreviewError('当前系统请使用浏览器图文复制。')
     preview, cover = record['preview'], record['cover'] or record['png']
     with LOCK:
         image_path = None
-        cache = Path(os.environ['LOCALAPPDATA']) / 'LinkExpand' / 'clipboard'
+        cache = (Path.home()/'Library'/'Application Support'/'LinkExpand' if sys.platform=='darwin'
+                 else Path(os.environ['LOCALAPPDATA'])/'LinkExpand')/'clipboard'
         if cover:
             cache.mkdir(parents=True, exist_ok=True)
             image_path = cache / (key + '.png')
             image_path.write_bytes(cover)
         text = plain_text(preview)
         fragment = rich_html(preview, cover, image_path.as_uri() if image_path else None)
-        set_formats([
-            ('QQ_Unicode_RichEdit_Format', chat_xml(text, image_path)),
-            ('HTML Format', cf_html(fragment, preview.url)),
-            (13, (text + '\0').encode('utf-16-le')),
-        ])
+        if sys.platform=='darwin':
+            from .macos_clipboard import copy_rich as copy_macos_rich
+            copy_macos_rich(record,image_path)
+        else:
+            set_formats([
+                ('QQ_Unicode_RichEdit_Format', chat_xml(text, image_path)),
+                ('HTML Format', cf_html(fragment, preview.url)),
+                (13, (text + '\0').encode('utf-16-le')),
+            ])
         # Keep referenced files after the program exits, so delayed pastes still work.
         if cache.is_dir():
             files = sorted(cache.glob('*.png'), key=lambda file: file.stat().st_mtime, reverse=True)

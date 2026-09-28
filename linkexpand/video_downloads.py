@@ -48,6 +48,7 @@ def open_video(url, headers=None, request_headers=None, credential_origin=None,a
         address = public_addresses(parts.hostname, port)[0]
         factory = PinnedHTTPSConnection if parts.scheme == 'https' else PinnedHTTPConnection
         connection = factory(parts.hostname, port, address, 6)
+        response=None
         try:
             connection.request('GET', parts.path + ('?' + parts.query if parts.query else ''), headers={
                 'User-Agent': 'Mozilla/5.0', 'Accept-Encoding': 'identity',
@@ -70,6 +71,7 @@ def open_video(url, headers=None, request_headers=None, credential_origin=None,a
             yield response
             return
         finally:
+            if response is not None:response.close()
             connection.close()
     raise PreviewError('视频服务器跳转次数过多。')
 

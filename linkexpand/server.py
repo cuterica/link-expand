@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import secrets
 import socket
+import subprocess
 import sys
 import threading
 from urllib.parse import urlsplit, quote
@@ -28,6 +29,11 @@ from .visuals import attach_visual
 from .video_downloads import DownloadManager, MAX_VIDEO_BYTES
 
 STATIC = Path(__file__).parent / "static"
+
+
+def open_page(url):
+    if sys.platform=='darwin':subprocess.Popen(['open',url])
+    else:webbrowser.open(url)
 
 
 class App:
@@ -62,6 +68,8 @@ class App:
             return self._downloads
 
     def close(self):
+        from .owned_process import stop_workers
+        stop_workers()
         if self._downloads:
             self._downloads.close()
 
@@ -221,8 +229,8 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(200, (STATIC / path[1:]).read_bytes(), mime)
         elif path == '/api/capabilities':
             if self.authenticated():
-                self.respond_json(200, {'native_rich': os.name == 'nt', 'version': __version__,
-                                       'copy_video': os.name == 'nt', 'max_video_bytes': MAX_VIDEO_BYTES,
+                self.respond_json(200, {'native_rich': os.name == 'nt' or sys.platform=='darwin', 'version': __version__,
+                                       'copy_video': os.name == 'nt' or sys.platform=='darwin', 'platform':sys.platform,'max_video_bytes': MAX_VIDEO_BYTES,
                                        'ffmpeg':bool(__import__('linkexpand.streaming',fromlist=['ffmpeg_path']).ffmpeg_path())})
         elif path == '/api/health':
             self.respond_json(200, {'app': 'link-expand', 'version': __version__})
@@ -383,7 +391,7 @@ def main():
             with opener.open(existing_url + '/api/health', timeout=2) as response:
                 existing = json.load(response)
             if existing == {'app': 'link-expand', 'version': __version__}:
-                webbrowser.open(existing_url)
+                open_page(existing_url)
                 return
         except (OSError, ValueError):
             pass
@@ -392,9 +400,12 @@ def main():
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"Link Expand 已启动：{url}\n按 Ctrl+C 退出。", flush=True)
     if not args.no_browser:
-        webbrowser.open(url)
+        open_page(url)
     try:
-        server.serve_forever()
+        if sys.platform=='darwin' and getattr(sys,'frozen',False) and not args.no_browser:
+            from .macos_app import run
+            run(server,url)
+        else:server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:

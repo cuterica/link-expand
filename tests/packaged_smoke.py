@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -60,6 +61,15 @@ def verify_native_clipboard(preview):
 
 
 def verify_video_file_clipboard(expected_path):
+    if sys.platform=='darwin':
+        from macos_clipboard_smoke import Cocoa,contents
+        from urllib.parse import urlsplit,unquote
+        cocoa=Cocoa()
+        with cocoa.pool():
+            payloads=dict(contents(cocoa)[0])
+            path=unquote(urlsplit(payloads['public.file-url'].decode().rstrip('\0')).path)
+            assert Path(path).resolve()==Path(expected_path).resolve()
+        return
     import ctypes
     from ctypes import wintypes
     user = ctypes.WinDLL('user32')
@@ -90,6 +100,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
+    parser.add_argument('--expected-version',default='0.3.1')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:
@@ -98,6 +109,7 @@ def main():
     environment = dict(os.environ)
     for name in ['PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV']:
         environment.pop(name, None)
+    if sys.platform=='darwin':environment['PATH']='/usr/bin:/bin:/usr/sbin:/sbin'
     if os.name == 'nt':
         windows = environment.get('SystemRoot', 'C:/Windows')
         environment['PATH'] = os.pathsep.join([windows, str(Path(windows) / 'System32')])
@@ -123,8 +135,8 @@ def main():
                         time.sleep(.3)
                 assert 'Link Expand' in html
                 with urllib.request.urlopen(base + '/api/health', timeout=5) as response:
-                    assert json.load(response) == {'app': 'link-expand', 'version': '0.3.0'}
-                assert 'v0.3.0' in html
+                    assert json.load(response) == {'app': 'link-expand', 'version': args.expected_version}
+                assert 'v'+args.expected_version in html
                 token = re.search(r'name="local-token" content="([^"]+)"', html).group(1)
                 for url, expected in [
                     ('https://github.com', '网页封面'),
@@ -142,14 +154,23 @@ def main():
                         with urllib.request.urlopen(base + preview[field], timeout=10) as response:
                             assert response.read(8) == b'\x89PNG\r\n\x1a\n'
                     print(json.dumps({'PASS': url, 'source': preview['visual_source']}), flush=True)
-                if os.name == 'nt':
+                if os.name == 'nt' or sys.platform=='darwin':
                     request = urllib.request.Request(base + '/api/copy-rich',
                         data=json.dumps({'id': preview['id']}).encode(),
                         headers={'Content-Type': 'application/json', 'X-Local-Token': token})
                     with urllib.request.urlopen(request, timeout=10) as response:
                         assert json.load(response)['ok']
-                    verify_native_clipboard(preview)
-                    print('PASS: native mixed text/image clipboard, readable PNG file, HTML links, Unicode text', flush=True)
+                    if os.name=='nt':verify_native_clipboard(preview)
+                    else:
+                        from macos_clipboard_smoke import Cocoa,contents
+                        cocoa=Cocoa()
+                        with cocoa.pool():
+                            payloads=dict(contents(cocoa)[0])
+                            assert payloads['public.utf8-plain-text'].decode()==preview['text']
+                            assert preview['url'] in payloads['public.html'].decode()
+                            assert payloads['public.png'].startswith(b'\x89PNG')
+                            assert payloads['com.apple.flat-rtfd']
+                    print('PASS: native mixed text/image clipboard, embedded image, HTML links, Unicode text', flush=True)
                 def post(path, data):
                     request = urllib.request.Request(base + path, data=json.dumps(data).encode(),
                         headers={'Content-Type':'application/json','X-Local-Token':token})
@@ -169,7 +190,7 @@ def main():
                     data=response.read()
                 assert data[4:8]==b'ftyp'
                 assert hashlib.sha256(data).hexdigest()==job['sha256']
-                if os.name=='nt':
+                if os.name=='nt' or sys.platform=='darwin':
                     post('/api/video/copy',{'job_id':job['id']})
                     verify_video_file_clipboard(job['path'])
                 print(json.dumps({'PASS':'X whole video and file clipboard','size':len(data),

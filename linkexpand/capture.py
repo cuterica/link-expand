@@ -25,6 +25,11 @@ def browser_executable():
         executable = shutil.which(name)
         if executable:
             return executable
+    if sys.platform=='darwin':
+        for root in [Path('/Applications'),Path.home()/'Applications']:
+            for app,name in [('Google Chrome','Google Chrome'),('Microsoft Edge','Microsoft Edge'),('Chromium','Chromium'),('Brave Browser','Brave Browser')]:
+                path=root/(app+'.app')/'Contents'/'MacOS'/name
+                if path.is_file():return str(path)
     if os.name == "nt":
         for root in [os.environ.get("PROGRAMFILES", ""), os.environ.get("PROGRAMFILES(X86)", ""),
                      os.environ.get("LOCALAPPDATA", "")]:

@@ -18,7 +18,10 @@ def main():
         if Path(runtime.chromium.executable_path).is_file():
             return
     print("首次使用：正在安装截图浏览器，请稍候。", flush=True)
-    sys.exit(subprocess.call([sys.executable, "-m", "playwright", "install", "chromium"]))
+    if getattr(sys,'frozen',False):
+        from playwright.__main__ import main as playwright_main
+        sys.argv=['playwright','install','chromium'];playwright_main()
+    else:sys.exit(subprocess.call([sys.executable, "-m", "playwright", "install", "chromium"]))
 
 
 if __name__ == "__main__":

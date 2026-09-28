@@ -1,5 +1,7 @@
 """Optional end-to-end checks; requires a working Chrome/Chromium installation."""
 import asyncio
+import re
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 import sys
@@ -19,6 +21,15 @@ from linkexpand import __version__
 
 ARTIFACTS = Path(__file__).resolve().parents[1] / "artifacts"
 ARTIFACTS.mkdir(exist_ok=True)
+
+@contextmanager
+def managed_browser(runtime):
+    executable=browser_executable()
+    # Mac's headless clipboard is isolated from the Cocoa system pasteboard.
+    browser=runtime.chromium.launch(headless=sys.platform!='darwin',**({'executable_path':executable} if executable else {}))
+    try:yield browser
+    finally:browser.close()
+
 image = Image.new("RGB", (960, 480), "#214f40")
 draw = ImageDraw.Draw(image)
 draw.rectangle((480, 0, 960, 480), fill="#b8cf99")
@@ -49,9 +60,7 @@ def ui_check():
     errors = []
     try:
         with patch("linkexpand.server.get_preview", side_effect=fake_preview), \
-                patch("linkexpand.server.attach_visual", side_effect=fake_visual), sync_playwright() as runtime:
-            executable = browser_executable()
-            browser = runtime.chromium.launch(headless=True, **({"executable_path": executable} if executable else {}))
+                patch("linkexpand.server.attach_visual", side_effect=fake_visual), sync_playwright() as runtime, managed_browser(runtime) as browser:
             context = browser.new_context(viewport={"width": 1440, "height": 1000},
                                           permissions=["clipboard-read", "clipboard-write"], accept_downloads=True)
             page = context.new_page()
@@ -67,14 +76,14 @@ def ui_check():
             expect(page.locator("#copy-image")).to_be_enabled()
             assert page.locator("#preview-badge").inner_text() == "网页图片"
             page.locator("#copy-text").click()
-            expect(page.locator("#toast")).to_contain_text("图文与可点击链接已复制")
+            expect(page.locator("#toast")).to_contain_text(re.compile('图文与可点击链接已复制|图片、文字与真实链接已一起复制'))
             assert "https://fixture.example/first" in page.evaluate("navigator.clipboard.readText()")
             types = page.evaluate("navigator.clipboard.read().then(items => items[0].types)")
             assert 'text/html' in types and 'text/plain' in types
             editor = context.new_page()
             editor.set_content('<div id="paste-target" contenteditable="true" style="width:520px;min-height:300px"></div>')
             editor.locator('#paste-target').click()
-            editor.keyboard.press('Control+V')
+            editor.keyboard.press('Meta+V' if sys.platform=='darwin' else 'Control+V')
             expect(editor.locator('#paste-target img')).to_have_count(1)
             expect(editor.locator('#paste-target a').first).to_have_attribute('href', 'https://fixture.example/first')
             assert editor.locator('#paste-target img').evaluate('img => img.complete && img.naturalWidth > 0')
@@ -115,7 +124,6 @@ def ui_check():
             expect(legacy.locator('#copy-text')).to_be_disabled()
             legacy.close()
             context.close()
-            browser.close()
         assert not errors, errors
         print("PASS: expansion, editing, image and rich clipboard, download, layout, visible version, old backend cannot silently copy")
     finally:

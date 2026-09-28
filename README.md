@@ -6,7 +6,7 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/latest)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.0)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
@@ -15,6 +15,18 @@
 页面右上角显示 `v0.3.0`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
+
+## macOS 免安装软件
+
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.1)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。启动窗口提供打开界面、打开下载文件夹和退出功能；下载与卡片界面沿用 Windows 版。
+
+Mac 版本显示 `v0.3.1`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在启动窗口安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+
+Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
+
+HLS / DASH 和分离音视频合并仍使用免费的 FFmpeg。程序自动寻找 Homebrew、`/usr/local/bin`、应用旁边以及 `~/Library/Application Support/LinkExpand/tools/ffmpeg`。Mac 包不内嵌 FFmpeg；可以自行用 `brew install ffmpeg` 或放入已有的可执行文件。普通文件和音视频直链不依赖它。
+
+分发包采用本机临时签名，尚未做 Apple Developer ID 签名和公证。首次从网上下载后，macOS 可能要求在「系统设置 → 隐私与安全性 → 仍要打开」允许启动。当前提供 arm64 预构建包；Intel Mac 可从源码启动或在 Intel Mac 上使用构建脚本生成对应包。
 
 ## 从源码启动
 
@@ -50,7 +62,7 @@ bash run.sh
 - 「手动编辑」修改标题、摘要；同一 URL 保留原来的画面。
 - 左侧「复制卡片」保持整张 PNG 图片和当前排版。
 - 右侧「复制图文与链接」一次复制图片、标题、摘要和真实 URL。Windows 分发版同时写入桌面聊天使用的图文格式、HTML 富文本和纯文本格式，让支持图文粘贴的微信 / QQ 读取同一次复制中的图片与文字。图片资源保存在本机，便于客户端读取。文字中的 URL 保留为真实链接，图片中的 URL 仍属于图片像素。
-- macOS / Linux 浏览器方式使用带内嵌 PNG 的 HTML 富文本，可粘贴到支持富文本的文档、邮件或编辑器。纯文本输入框只会保留文字和链接；接收软件决定如何呈现排版。
+- macOS 原生图文复制同时提供带附件的 RTFD 与内嵌 PNG 的 HTML；Linux 浏览器方式使用带内嵌 PNG 的 HTML 富文本，可粘贴到支持富文本的文档、邮件或编辑器。纯文本输入框只会保留文字和链接；接收软件决定如何呈现排版。
 - 「下载卡片 PNG」导出整个预览；「下载图片 / 截图」导出画面。
 
 复制图片需要浏览器支持 [Clipboard API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/write)，建议使用 Chrome 或 Edge。
@@ -131,3 +143,15 @@ powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
 ```
 
 构建使用独立环境 `%LOCALAPPDATA%\LinkExpand\build-venv`，将 EXE、含说明、扩展与许可证的 ZIP、单独扩展 ZIP、SHA-256 校验文件输出到 `dist`。只打包已有程序及依赖，不更换界面或截图实现。截图子进程在 EXE 中通过专用入口调用同一份 Playwright 代码。
+
+## 构建 macOS 分发版
+
+在 Mac 上准备 Python 3.10 或以上版本，运行 `bash scripts/build_macos.sh`。构建环境位于 `~/Library/Application Support/LinkExpand/build-venv`；输出应用 ZIP 与 SHA-256 文件到 `dist`，自动选择本机 arm64 / x86_64 架构。应用内附 Python、Tcl/Tk、Pillow、Playwright、证书组件和依赖的许可证，不附带 Chrome 或 FFmpeg。
+
+Mac 验证命令：
+
+```bash
+python tests/macos_clipboard_smoke.py
+python tests/macos_app_smoke.py
+python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.1
+```

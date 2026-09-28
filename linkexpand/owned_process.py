@@ -5,6 +5,21 @@ from ctypes import wintypes
 import os
 import signal
 import subprocess
+import threading
+
+ACTIVE={}
+LOCK=threading.Lock()
+
+
+def stop_workers():
+    with LOCK:processes=list(ACTIVE.values())
+    for process in processes:
+        if process.poll() is not None:continue
+        if os.name=='nt':
+            subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],capture_output=True,check=False,timeout=10)
+        else:
+            try:os.killpg(process.pid,signal.SIGKILL)
+            except ProcessLookupError:pass
 
 
 def windows_job(process):
@@ -36,6 +51,7 @@ def run_worker(command,payload,timeout):
                              text=True,encoding='utf-8',start_new_session=os.name!='nt',
                              **({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
     job=windows_job(process)
+    with LOCK:ACTIVE[process.pid]=process
     try:
         output,error=process.communicate(payload,timeout=timeout)
         return subprocess.CompletedProcess(command,process.returncode,output,error)
@@ -50,6 +66,7 @@ def run_worker(command,payload,timeout):
         process.kill();process.communicate(timeout=10)
         raise
     finally:
+        with LOCK:ACTIVE.pop(process.pid,None)
         if job:job[0].CloseHandle(job[1])
         elif os.name!='nt':
             try:os.killpg(process.pid,signal.SIGTERM)

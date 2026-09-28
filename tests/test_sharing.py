@@ -88,6 +88,7 @@ class SharingTests(unittest.TestCase):
         record = {'preview': self.preview(), 'cover': None, 'png': image.getvalue()}
         with tempfile.TemporaryDirectory() as folder, \
                 patch('linkexpand.clipboard.os', SimpleNamespace(name='nt', environ={'LOCALAPPDATA': folder})), \
+                patch('linkexpand.clipboard.sys', SimpleNamespace(platform='win32')), \
                 patch('linkexpand.clipboard.set_formats') as formats:
             copy_rich(record, 'abc123')
             payloads = dict(formats.call_args.args[0])

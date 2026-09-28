@@ -27,8 +27,13 @@ def ffmpeg_path():
     if configured and Path(configured).is_file():return configured
     executable=shutil.which('ffmpeg')
     if executable:return executable
+    import sys
+    if sys.platform=='darwin':
+        candidates=[Path('/opt/homebrew/bin/ffmpeg'),Path('/usr/local/bin/ffmpeg'),Path('/opt/local/bin/ffmpeg'),
+                    Path(sys.executable).parent/'ffmpeg',Path.home()/'Library'/'Application Support'/'LinkExpand'/'tools'/'ffmpeg']
+        for path in candidates:
+            if path.is_file() and os.access(path,os.X_OK):return str(path)
     if os.name=='nt':
-        import sys
         candidates=[Path(sys.executable).parent/'ffmpeg.exe',Path(sys.executable).parent/'tools'/'ffmpeg.exe',
                     Path(os.environ['LOCALAPPDATA'])/'LinkExpand'/'tools'/'ffmpeg.exe']
         candidates+=sorted((Path(os.environ['LOCALAPPDATA'])/'Microsoft'/'WinGet'/'Packages').glob('*FFmpeg*/ffmpeg*/bin/ffmpeg.exe'),reverse=True)

@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def notices(target):
     target.mkdir(parents=True, exist_ok=True)
-    for package in ["pillow", "playwright", "greenlet", "pyee", "typing-extensions", "pyinstaller"]:
+    packages=["pillow", "playwright", "greenlet", "pyee", "typing-extensions", "pyinstaller"]
+    if sys.platform=='darwin':packages+=['certifi','macholib','altgraph']
+    for package in packages:
         distribution = metadata.distribution(package)
         for item in distribution.files or []:
             if re.search(r"(?:^|/)(?:LICENSE|COPYING|NOTICE)[^/]*$", str(item), re.I):
@@ -28,9 +30,15 @@ def notices(target):
                     destination = target / package / str(item).replace("/", "_")
                     destination.parent.mkdir(exist_ok=True)
                     shutil.copy2(source, destination)
-    python_license = Path(sys.base_prefix) / "LICENSE.txt"
-    if python_license.is_file():
-        shutil.copy2(python_license, target / "Python-LICENSE.txt")
+    for name in ['LICENSE.txt','LICENSE','Resources/LICENSE.txt']:
+        python_license=Path(sys.base_prefix)/name
+        if python_license.is_file():shutil.copy2(python_license,target/'Python-LICENSE.txt');break
+    if sys.platform=='darwin':
+        import tkinter
+        library=Path(tkinter.Tcl().call('info','library'))
+        for folder in [library,library.parent/'tk8.6',library.parent,Path('/Library/Frameworks/Tcl.framework/Resources'),Path('/Library/Frameworks/Tk.framework/Resources')]:
+            source=folder/'license.terms'
+            if source.is_file():shutil.copy2(source,target/(folder.name+'-license.terms'))
     (target / "README.txt").write_text(
         "Link Expand bundles Python, Pillow, Playwright and their dependencies.\n"
         "These files contain the licenses of the bundled components.\n"
@@ -73,6 +81,7 @@ def main():
     VarFileInfo([VarStruct('Translation', [1033, 1200])])])''', encoding="utf-8")
     command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
                "--console", "--name", name, "--collect-all", "playwright",
+               "--exclude-module", "tkinter",
                "--add-data", f"{stage / 'linkexpand' / 'static'};linkexpand/static",
                "--add-data", f"{notice_dir};licenses", "--version-file", str(version_file),
                "--paths", str(stage), "--distpath", str(work / "dist"),

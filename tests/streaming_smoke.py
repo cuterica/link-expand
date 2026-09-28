@@ -2,6 +2,7 @@
 import http.client
 from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -73,7 +74,16 @@ def run():
                     deadline=time.monotonic()+40
                     while job.status not in {'complete','error','cancelled'} and time.monotonic()<deadline:time.sleep(.05)
                     assert job.status=='complete',job.snapshot()
-                    result=json.loads(subprocess.check_output([ffprobe,'-v','error','-show_entries','format=duration:stream=codec_type','-of','json',str(job.file)],timeout=10))
+                    if Path(ffprobe).is_file():
+                        result=json.loads(subprocess.check_output([ffprobe,'-v','error','-show_entries','format=duration:stream=codec_type','-of','json',str(job.file)],timeout=10))
+                    else:
+                        decoded=subprocess.run([ffmpeg,'-hide_banner','-nostdin','-i',str(job.file),'-f','null','-'],capture_output=True,text=True,timeout=15)
+                        assert decoded.returncode==0,decoded.stderr
+                        duration=re.search(r'Duration: (\d+):(\d+):(\d+\.\d+)',decoded.stderr)
+                        assert duration,decoded.stderr
+                        seconds=sum(float(value)*scale for value,scale in zip(duration.groups(),[3600,60,1]))
+                        result={'streams':[{'codec_type':kind} for kind in ['video','audio'] if kind.capitalize()+':' in decoded.stderr],
+                                'format':{'duration':str(seconds)}}
                     assert {stream['codec_type'] for stream in result['streams']}=={'video','audio'},result
                     assert 3.8<=float(result['format']['duration'])<=4.3,result
                     print(json.dumps({'PASS':mode,'size':job.file.stat().st_size,'duration':result['format']['duration']}),flush=True)

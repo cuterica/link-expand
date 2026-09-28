@@ -10,6 +10,7 @@ import ipaddress
 import re
 import socket
 import ssl
+import sys
 import time
 from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
 import zlib
@@ -93,7 +94,11 @@ class PinnedHTTPSConnection(PinnedHTTPConnection):
     def connect(self):
         super().connect()
         try:
-            self.sock = ssl.create_default_context().wrap_socket(
+            context=ssl.create_default_context()
+            if sys.platform=='darwin':
+                import certifi
+                context.load_verify_locations(cafile=certifi.where())
+            self.sock = context.wrap_socket(
                 self.sock, server_hostname=self.host
             )
         except Exception:

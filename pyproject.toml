@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "local-link-expand"
-version = "0.3.0"
+version = "0.3.1"
 description = "Local link summaries with selected images and browser screenshots"
 requires-python = ">=3.10"
-dependencies = ["Pillow>=10.4,<13", "playwright>=1.48,<2"]
+dependencies = ["Pillow>=10.4,<13", "playwright>=1.48,<2", "certifi>=2025.1.31; sys_platform == 'darwin'"]
 
 [project.scripts]
 link-expand = "linkexpand.server:main"
