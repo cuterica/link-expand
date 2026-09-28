@@ -12,6 +12,10 @@ let revision = 0;
 let requestController = null;
 let nativeRich = false;
 let clipboardReady = false;
+let canCopyVideo = false;
+let videoJob = null;
+let videoJobId = null;
+let videoPolling = false;
 const actionIds = ['copy-image', 'copy-text', 'download', 'download-cover'];
 
 async function api(path, data, signal) {
@@ -48,6 +52,7 @@ function setBusy(value) {
 async function display(preview, job) {
   if (job !== revision) return;
   current = preview;
+  displayVideoChoices(preview);
   cardBlob = null;
   $('card-site').textContent = preview.site_name;
   $('card-title').textContent = preview.title;
@@ -187,10 +192,132 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
   .then(capabilities => {
     if (capabilities.version !== expectedVersion) throw new Error('页面与后台版本不一致，请关闭旧程序并重新启动新版。');
     nativeRich = capabilities.native_rich;
+    canCopyVideo = capabilities.copy_video;
     clipboardReady = true;
     $('copy-hint').textContent = nativeRich
       ? 'Windows 图文复制已启用：右侧一次复制图片、标题、摘要与真实链接。'
       : '图文复制已启用：右侧包含图片和可点击链接，适用于支持富文本的粘贴目标。';
     setBusy(busy);
+    $('video-download').disabled = !(current?.videos?.length);
+    restoreVideoJob();
   })
-  .catch(error => { clipboardReady = false; $('copy-text').disabled = true; feedback(error.message, true); });
+  .catch(error => { clipboardReady = false; $('copy-text').disabled = true; $('video-download').disabled = true; feedback(error.message, true); });
+
+function displayVideoChoices(preview) {
+  const choices = $('video-choice');
+  choices.replaceChildren();
+  const videos = preview.videos || [];
+  if (!videos.length) {
+    choices.add(new Option('当前链接未识别到完整视频', ''));
+  } else {
+    videos.forEach(video => {
+      const duration = video.duration_ms ? ` · ${Math.round(video.duration_ms / 1000)} 秒` : '';
+      choices.add(new Option(`视频 ${video.index}${duration} · ${video.qualities[0] || 'MP4'}`, video.index));
+    });
+    choices.value = String(preview.selected_video || videos[0].index);
+  }
+  choices.disabled = !videos.length;
+  $('video-download').disabled = !videos.length || !clipboardReady;
+  $('video-hint').textContent = videos.length
+    ? `识别到 ${videos.length} 个视频。多连接下载，可暂停续传；优先选择 500 MB 内的最高可用画质。`
+    : '展开 X / 推特视频链接后，可下载完整 MP4。自动选择 500 MB 内的最高可用画质。';
+}
+
+function videoError(message) {
+  $('video-feedback').textContent = message;
+  $('video-feedback').hidden = !message;
+}
+
+function sizeText(bytes) {
+  return (bytes / 1_000_000).toFixed(1) + ' MB';
+}
+
+function displayVideoJob(job) {
+  videoJob = job;
+  videoJobId = job.id;
+  try { localStorage.setItem('linkexpand-video-job', job.id); } catch (_) {}
+  $('video-task').hidden = false;
+  const labels = {queued: '排队中', resolving: '读取视频信息', downloading: '正在下载',
+    pausing: '暂停中', paused: '已暂停', verifying: '检查完整性', complete: '下载完成',
+    cancelling: '取消中', cancelled: '已取消', error: '下载失败'};
+  $('video-status').textContent = labels[job.status] || job.status;
+  $('video-percent').textContent = job.progress == null ? '' : Math.round(job.progress * 100) + '%';
+  if (job.progress == null) $('video-progress').removeAttribute('value');
+  else $('video-progress').value = job.progress;
+  $('video-detail').textContent = [job.quality, `${sizeText(job.downloaded)} / ${job.total ? sizeText(job.total) : '大小未知'}`,
+    job.speed ? `${sizeText(job.speed)}/秒` : ''].filter(Boolean).join(' · ');
+  $('video-pause').hidden = !['queued', 'resolving', 'downloading'].includes(job.status);
+  $('video-resume').hidden = !['paused', 'error'].includes(job.status);
+  $('video-resume').textContent = job.resumable ? '继续下载' : '重新下载';
+  $('video-cancel').hidden = ['complete', 'cancelled'].includes(job.status);
+  $('video-save').hidden = job.status !== 'complete';
+  $('video-copy').disabled = job.status !== 'complete' || !canCopyVideo;
+  $('video-path').hidden = !job.path;
+  $('video-path').textContent = job.path ? '已保存到：' + job.path : '';
+  videoError(job.error || '');
+  if (['queued', 'resolving', 'downloading', 'pausing', 'verifying', 'cancelling'].includes(job.status)) pollVideoJob();
+}
+
+async function getVideoJob(id) {
+  const response = await fetch('/api/video/jobs/' + encodeURIComponent(id), {headers: {'X-Local-Token': token}});
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || '无法读取下载任务。');
+  return result;
+}
+
+async function restoreVideoJob() {
+  try {
+    const id = localStorage.getItem('linkexpand-video-job');
+    if (id) displayVideoJob(await getVideoJob(id));
+  } catch (_) { try { localStorage.removeItem('linkexpand-video-job'); } catch (_) {} }
+}
+
+async function pollVideoJob() {
+  if (videoPolling) return;
+  videoPolling = true;
+  try {
+    while (videoJobId) {
+      await new Promise(resolve => setTimeout(resolve, 700));
+      const requestedId = videoJobId;
+      const job = await getVideoJob(requestedId);
+      if (requestedId !== videoJobId) continue;
+      displayVideoJob(job);
+      if (['paused', 'complete', 'cancelled', 'error'].includes(job.status)) break;
+    }
+  } catch (error) { videoError(error.message); }
+  finally { videoPolling = false; }
+}
+
+$('video-download').addEventListener('click', async () => {
+  if (!current || !clipboardReady || !$('video-choice').value) return;
+  $('video-download').disabled = true;
+  videoError('');
+  try { displayVideoJob(await api('/api/video/start', {id: current.id, video_index: Number($('video-choice').value)})); }
+  catch (error) { videoError(error.message); }
+  finally { $('video-download').disabled = !(current?.videos?.length) || !clipboardReady; }
+});
+
+for (const action of ['pause', 'resume', 'cancel']) {
+  $('video-' + action).addEventListener('click', async () => {
+    if (!videoJobId) return;
+    const button = $('video-' + action);
+    button.disabled = true;
+    try { displayVideoJob(await api('/api/video/' + action, {job_id: videoJobId})); }
+    catch (error) { videoError(error.message); }
+    finally { button.disabled = false; }
+  });
+}
+$('video-copy').addEventListener('click', async () => {
+  if (!videoJobId || videoJob?.status !== 'complete') return;
+  try {
+    await api('/api/video/copy', {job_id: videoJobId});
+    toast('完整视频文件已复制，可粘贴到微信 / QQ 或文件夹');
+  } catch (error) { videoError(error.message); }
+});
+$('video-save').addEventListener('click', () => {
+  if (!videoJobId || videoJob?.status !== 'complete') return;
+  const link = document.createElement('a');
+  link.href = '/downloads/' + videoJobId + '.mp4';
+  link.download = videoJob.filename;
+  link.click();
+});

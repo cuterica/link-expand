@@ -5,6 +5,7 @@ from ctypes import wintypes
 from html import escape
 import os
 from pathlib import Path
+import struct
 import threading
 import time
 
@@ -12,6 +13,20 @@ from .metadata import PreviewError, plain_text
 from .sharing import rich_html
 
 LOCK = threading.Lock()
+
+
+def file_drop_payload(path: Path) -> bytes:
+    # DROPFILES: pFiles, point.x, point.y, fNC, fWide; double-NUL UTF-16 file list.
+    return struct.pack('<IiiII', 20, 0, 0, 0, 1) + (str(path.resolve()) + '\0\0').encode('utf-16-le')
+
+
+def copy_video_file(path: Path):
+    if os.name != 'nt':
+        raise PreviewError('复制视频文件需要 Windows；当前系统请从下载文件夹分享视频。')
+    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 500_000_000:
+        raise PreviewError('视频文件不存在或超过 500 MB，请重新下载。')
+    with LOCK:
+        set_formats([(15, file_drop_payload(path))])
 
 
 def cf_html(fragment: str, source_url: str) -> bytes:

@@ -20,10 +20,11 @@ import webbrowser
 
 from . import __version__
 from .cards import original_visual, render_card, thumbnail
-from .clipboard import copy_rich
+from .clipboard import copy_rich, copy_video_file
 from .metadata import Preview, PreviewError, clean_text, get_preview, normalize_url, plain_text
 from .sharing import rich_html
 from .visuals import attach_visual
+from .video_downloads import DownloadManager, MAX_VIDEO_BYTES
 
 STATIC = Path(__file__).parent / "static"
 
@@ -34,6 +35,18 @@ class App:
         self.lock = threading.RLock()
         self.fetch_slots = threading.BoundedSemaphore(2)
         self.records = OrderedDict()
+        self._downloads = None
+
+    @property
+    def downloads(self):
+        with self.lock:
+            if self._downloads is None:
+                self._downloads = DownloadManager()
+            return self._downloads
+
+    def close(self):
+        if self._downloads:
+            self._downloads.close()
 
     def put(self, preview, cover=None, visual=None):
         png = render_card(preview, cover)
@@ -54,7 +67,10 @@ class App:
                 "text": plain_text(preview), "image": f"/assets/{key}/card.png",
                 "html": rich_html(preview, record["cover"] or record['png']),
                 "cover": f"/assets/{key}/cover.png" if record["cover"] else None,
-                "visual": f"/assets/{key}/visual.png" if record["visual"] else None}
+                "visual": f"/assets/{key}/visual.png" if record["visual"] else None,
+                "videos": [{'index': video['index'], 'duration_ms': video['duration_ms'],
+                            'qualities': [variant['quality'] for variant in video['variants']]}
+                           for video in preview.videos], 'selected_video': preview.selected_video}
 
     def get_record(self, key):
         with self.lock:
@@ -87,6 +103,9 @@ class App:
                           domain, clean_text(str(data.get("site_name", domain)), 80) or domain)
         if original:
             preview.visual_source = original["preview"].visual_source
+            if url == original['preview'].url:
+                preview.videos = original['preview'].videos
+                preview.selected_video = original['preview'].selected_video
         preview.summary_source = "手动编辑"
         return self.put(preview, original["cover"] if original else None,
                         original["visual"] if original else None)
@@ -169,9 +188,40 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(200, (STATIC / path[1:]).read_bytes(), mime)
         elif path == '/api/capabilities':
             if self.authenticated():
-                self.respond_json(200, {'native_rich': os.name == 'nt', 'version': __version__})
+                self.respond_json(200, {'native_rich': os.name == 'nt', 'version': __version__,
+                                       'copy_video': os.name == 'nt', 'max_video_bytes': MAX_VIDEO_BYTES})
         elif path == '/api/health':
             self.respond_json(200, {'app': 'link-expand', 'version': __version__})
+        elif path == '/api/video/jobs' or re.fullmatch(r'/api/video/jobs/[a-f0-9]{24}', path):
+            if not self.authenticated():
+                return
+            try:
+                result = app.downloads.list() if path == '/api/video/jobs' else app.downloads.get(path.rsplit('/', 1)[1]).snapshot()
+                self.respond_json(200, result)
+            except PreviewError as error:
+                self.respond_json(404, {'error': str(error)})
+        elif re.fullmatch(r'/downloads/[a-f0-9]{24}\.mp4', path):
+            try:
+                job = app.downloads.get(path.rsplit('/', 1)[1][:-4])
+                if job.status != 'complete' or not job.valid_file():
+                    raise PreviewError('视频尚未下载完成。')
+                with job.file.open('rb') as video:
+                    size = os.fstat(video.fileno()).st_size
+                    if not 0 < size <= MAX_VIDEO_BYTES:
+                        raise PreviewError('视频超过 500 MB。')
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'video/mp4')
+                    self.send_header('Content-Length', str(size))
+                    self.send_header('Content-Disposition', f'attachment; filename="{job.filename}"')
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.end_headers()
+                    while chunk := video.read(65536):
+                        self.wfile.write(chunk)
+            except PreviewError as error:
+                self.respond_json(404, {'error': str(error)})
+            except (BrokenPipeError, ConnectionResetError):
+                pass
         elif re.fullmatch(r"/assets/[a-f0-9]{24}/(card|cover|visual)\.png", path):
             # Assets are session-local, unguessable IDs; no arbitrary file paths.
             _, _, key, filename = path.split("/")
@@ -210,6 +260,25 @@ class Handler(BaseHTTPRequestHandler):
                 key = str(data.get('id', ''))
                 copy_rich(app.get_record(key), key)
                 result = {'ok': True}
+            elif path == '/api/video/start':
+                record = app.get_record(str(data.get('id', '')))
+                index = data.get('video_index')
+                preview = record['preview']
+                video = next((item for item in preview.videos if item['index'] == index), None)
+                if not video:
+                    raise PreviewError('请先展开含视频的 X / 推特链接，再选择视频。')
+                result = app.downloads.start(video, preview.url)
+            elif path in {'/api/video/pause', '/api/video/resume', '/api/video/cancel', '/api/video/copy'}:
+                job = app.downloads.get(str(data.get('job_id', '')))
+                if path.endswith('/resume'):
+                    job.launch()
+                elif path.endswith('/copy'):
+                    if job.status != 'complete' or not job.valid_file():
+                        raise PreviewError('视频尚未下载完成或文件已被移动。')
+                    copy_video_file(job.file)
+                else:
+                    job.pause(cancel=path.endswith('/cancel'))
+                result = job.snapshot()
             else:
                 self.respond_json(404, {"error": "接口不存在。"})
                 return
@@ -258,6 +327,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        app.close()
         server.server_close()
 
 

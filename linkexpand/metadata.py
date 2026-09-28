@@ -274,6 +274,8 @@ class Preview:
     candidates: list[dict] = field(default_factory=list, repr=False)
     visual_source: str = ""
     summary_source: str = "网页摘要"
+    videos: list[dict] = field(default_factory=list, repr=False)
+    selected_video: int | None = None
 
 
 def extract_metadata(resource: Resource) -> Preview:
@@ -309,6 +311,9 @@ def extract_metadata(resource: Resource) -> Preview:
 
 def get_preview(url: str) -> Preview:
     url = normalize_url(url)
+    from .xmedia import post_reference, preview_for_post
+    if post_reference(url):
+        return preview_for_post(url)
     is_video = re.search(r"\.(mp4|webm|mov|m4v)(?:$)", urlsplit(url).path, re.I)
     resource = fetch_resource(url, MAX_IMAGE, headers={"Range": "bytes=0-1023"} if is_video else None)
     mime = resource.content_type.split(";", 1)[0].strip().lower()

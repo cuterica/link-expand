@@ -15,6 +15,7 @@ from linkexpand.capture import browser_executable, capture
 from linkexpand.cards import thumbnail
 from linkexpand.metadata import Preview, Resource
 from linkexpand.server import App, Server
+from linkexpand import __version__
 
 ARTIFACTS = Path(__file__).resolve().parents[1] / "artifacts"
 ARTIFACTS.mkdir(exist_ok=True)
@@ -56,7 +57,7 @@ def ui_check():
             page = context.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(f"http://127.0.0.1:{server.server_port}")
-            expect(page.locator('#app-version')).to_have_text('v0.1.1')
+            expect(page.locator('#app-version')).to_have_text('v' + __version__)
             assert page.locator("#watch-toggle").count() == 0
             assert page.locator("#paste-wechat").count() == 0
             page.screenshot(path=str(ARTIFACTS / "interface.png"), full_page=True)

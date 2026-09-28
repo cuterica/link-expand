@@ -93,6 +93,12 @@ class ServerTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.request(path, {"enabled": True})[0], 404)
 
+    def test_video_actions_require_session_and_a_video(self):
+        self.assertEqual(self.request('/api/video/start', {'id':'x'}, {'X-Local-Token':''})[0], 403)
+        _, body, _ = self.request('/api/manual', {'url':'https://example.com','title':'No video'})
+        preview = json.loads(body)
+        self.assertEqual(self.request('/api/video/start', {'id':preview['id'],'video_index':1})[0],400)
+
 
 if __name__ == "__main__":
     unittest.main()

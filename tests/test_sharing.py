@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 
 from PIL import Image
 
-from linkexpand.clipboard import cf_html, chat_xml, copy_rich
+from linkexpand.clipboard import cf_html, chat_xml, copy_rich, file_drop_payload
 from linkexpand.metadata import Preview
 from linkexpand.sharing import rich_html
 
@@ -34,6 +34,15 @@ class CardParser(HTMLParser):
 
 
 class SharingTests(unittest.TestCase):
+    def test_video_file_clipboard_uses_file_list_not_video_bytes(self):
+        import struct
+        with tempfile.TemporaryDirectory() as folder:
+            video = Path(folder) / 'video.mp4'
+            video.write_bytes(b'file data')
+            payload = file_drop_payload(video)
+            self.assertEqual(struct.unpack('<IiiII', payload[:20]), (20, 0, 0, 0, 1))
+            self.assertEqual(payload[20:].decode('utf-16-le'), str(video.resolve())+'\0\0')
+            self.assertNotIn(b'file data', payload)
     def preview(self):
         return Preview('https://example.com/?a=1&b=2', '标题 <script>alert(1)</script>',
                        '摘要 & 内容', 'example.com', 'Example')

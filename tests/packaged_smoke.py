@@ -1,5 +1,6 @@
 """Verify the Windows EXE independently of the source tree and Python PATH."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -58,6 +59,34 @@ def verify_native_clipboard(preview):
         user.CloseClipboard()
 
 
+def verify_video_file_clipboard(expected_path):
+    import ctypes
+    from ctypes import wintypes
+    user = ctypes.WinDLL('user32')
+    kernel = ctypes.WinDLL('kernel32')
+    user.GetClipboardData.argtypes = [wintypes.UINT]
+    user.GetClipboardData.restype = wintypes.HANDLE
+    kernel.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel.GlobalLock.restype = wintypes.LPVOID
+    kernel.GlobalSize.argtypes = [wintypes.HGLOBAL]
+    kernel.GlobalSize.restype = ctypes.c_size_t
+    kernel.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    assert user.OpenClipboard(None)
+    try:
+        handle = user.GetClipboardData(15)
+        assert handle
+        pointer = kernel.GlobalLock(handle)
+        try:
+            data = ctypes.string_at(pointer, kernel.GlobalSize(handle))
+        finally:
+            kernel.GlobalUnlock(handle)
+        offset = int.from_bytes(data[:4], 'little')
+        path = data[offset:].decode('utf-16-le').split('\0', 1)[0]
+        assert Path(path).resolve() == Path(expected_path).resolve()
+    finally:
+        user.CloseClipboard()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
@@ -94,8 +123,8 @@ def main():
                         time.sleep(.3)
                 assert 'Link Expand' in html
                 with urllib.request.urlopen(base + '/api/health', timeout=5) as response:
-                    assert json.load(response) == {'app': 'link-expand', 'version': '0.1.1'}
-                assert 'v0.1.1' in html
+                    assert json.load(response) == {'app': 'link-expand', 'version': '0.2.0'}
+                assert 'v0.2.0' in html
                 token = re.search(r'name="local-token" content="([^"]+)"', html).group(1)
                 for url, expected in [
                     ('https://github.com', '网页封面'),
@@ -121,6 +150,30 @@ def main():
                         assert json.load(response)['ok']
                     verify_native_clipboard(preview)
                     print('PASS: native mixed text/image clipboard, readable PNG file, HTML links, Unicode text', flush=True)
+                def post(path, data):
+                    request = urllib.request.Request(base + path, data=json.dumps(data).encode(),
+                        headers={'Content-Type':'application/json','X-Local-Token':token})
+                    with urllib.request.urlopen(request, timeout=40) as response:
+                        return json.load(response)
+                x_preview = post('/api/preview', {'url':'https://x.com/TwitterDev/status/1460323737035677698'})
+                assert x_preview['videos']
+                job = post('/api/video/start', {'id':x_preview['id'],'video_index':x_preview['selected_video']})
+                deadline = time.monotonic()+90
+                while job['status'] not in {'complete','error','cancelled'} and time.monotonic()<deadline:
+                    time.sleep(.25)
+                    request = urllib.request.Request(base+'/api/video/jobs/'+job['id'],headers={'X-Local-Token':token})
+                    with urllib.request.urlopen(request,timeout=10) as response:job=json.load(response)
+                assert job['status']=='complete',job
+                assert 0 < job['downloaded'] <= 500_000_000
+                with urllib.request.urlopen(base+'/downloads/'+job['id']+'.mp4',timeout=20) as response:
+                    data=response.read()
+                assert data[4:8]==b'ftyp'
+                assert hashlib.sha256(data).hexdigest()==job['sha256']
+                if os.name=='nt':
+                    post('/api/video/copy',{'job_id':job['id']})
+                    verify_video_file_clipboard(job['path'])
+                print(json.dumps({'PASS':'X whole video and file clipboard','size':len(data),
+                    'quality':job['quality'],'file':job['path']}),flush=True)
             finally:
                 if os.name == 'nt':
                     subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
