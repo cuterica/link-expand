@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-link-expand"
+version = "0.1.0"
+description = "Local link summaries with selected images and browser screenshots"
+requires-python = ">=3.10"
+dependencies = ["Pillow>=10.4,<13", "playwright>=1.48,<2"]
+
+[project.scripts]
+link-expand = "linkexpand.server:main"
+
+[tool.setuptools.package-data]
+linkexpand = ["static/*"]
+
+[tool.setuptools.packages.find]
+include = ["linkexpand*"]

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="local-token" content="__LOCAL_TOKEN__">
+  <meta name="theme-color" content="#237b5b">
+  <title>Link Expand · 链接预览</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-definitions" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4M8 16l-1 1a4.24 4.24 0 0 1-6-6l4-4a4.24 4.24 0 0 1 6 0m2 2 1-1a4.24 4.24 0 0 1 6 6l-4 4a4.24 4.24 0 0 1-6 0" transform="translate(1 -1)"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 16-6-6-9 11"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4 10-10"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-4-4L5 15l-1 5Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-5"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11a9 9 0 0 1-9 9 10 10 0 0 1-4-.8L3 21l1.8-5A9 9 0 1 1 21 11Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></symbol>
+  </svg>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Link Expand 首页"><span class="brand-icon"><svg><use href="#i-link"/></svg></span><span>Link Expand<span class="brand-dot">.</span></span></a>
+    <div class="header-right"><span class="local-pill"><span class="status-dot"></span>本地运行</span><span class="version">v0.1</span></div>
+  </header>
+  <main>
+    <div class="intro"><div class="eyebrow">A LITTLE LINK. A BIGGER PICTURE.</div><h1>让链接，多一点内容。</h1><p>放入网址，自动展开摘要与画面。值得打开的内容，先看一眼。</p></div>
+    <div class="workspace">
+      <section class="controls" aria-label="链接及卡片设置">
+        <div class="panel link-panel">
+          <div class="panel-heading"><span class="step">01</span><h2>放入你的链接</h2><span class="small-label">从这里开始</span></div>
+          <form id="url-form">
+            <label for="url-input" class="field-label">网页地址</label>
+            <div class="url-field"><svg><use href="#i-link"/></svg><input id="url-input" name="url" type="text" inputmode="url" autocomplete="url" placeholder="粘贴一个 https:// 链接" maxlength="4096" required aria-describedby="url-hint"></div>
+            <p id="url-hint" class="hint">粘贴后自动展开 · 优先选图，没有合适图片时截图</p>
+            <button id="generate" class="button primary" type="submit"><span>展开链接</span><svg><use href="#i-arrow"/></svg></button>
+          </form>
+          <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+          <div class="visual-strategy"><span>网页图片</span><svg><use href="#i-arrow"/></svg><span>视频画面</span><svg><use href="#i-arrow"/></svg><span>网页截图</span></div>
+        </div>
+        <div class="panel edit-panel">
+          <div class="panel-heading"><span class="step">02</span><h2>调整卡片内容</h2><button id="edit-toggle" class="text-button" type="button" aria-expanded="false" aria-controls="editor"><svg><use href="#i-edit"/></svg><span>手动编辑</span></button></div>
+          <p id="edit-hint" class="panel-description">生成后可修改标题与摘要，也可以直接手动创建。</p>
+          <form id="editor" hidden>
+            <label for="title-input" class="field-label">标题</label><input id="title-input" maxlength="180" placeholder="给链接一个清晰的标题" required>
+            <label for="description-input" class="field-label">摘要 <span>选填</span></label><textarea id="description-input" maxlength="500" rows="3" placeholder="一两句话，介绍值得打开的内容"></textarea>
+            <button class="button secondary" type="submit" id="save-edit"><svg><use href="#i-check"/></svg>应用到卡片</button>
+          </form>
+        </div>
+        <div class="panel share-panel">
+          <div class="panel-heading"><span class="step">03</span><h2>保存这张预览</h2></div>
+          <div class="share-buttons"><button id="copy-image" class="button secondary" disabled><svg><use href="#i-image"/></svg>复制卡片</button><button id="copy-text" class="button secondary" disabled><svg><use href="#i-copy"/></svg>复制文字与链接</button></div>
+          <div class="share-bottom"><button id="download" class="text-button" disabled><svg><use href="#i-download"/></svg>下载卡片 PNG</button><button id="download-cover" class="text-button" disabled><svg><use href="#i-download"/></svg>下载图片 / 截图</button></div>
+          <p id="copy-hint" class="hint">左侧复制整张图片；右侧一次复制文字、可点击链接和图片。</p>
+        </div>
+        <div class="privacy-note"><svg><use href="#i-shield"/></svg><span>在本机生成 · 不上传到第三方服务 · 只访问你提供的网页</span></div>
+      </section>
+      <section class="preview-panel" aria-label="链接展开预览">
+        <div class="preview-heading"><h2>链接里的内容，先看一眼</h2><span id="preview-badge" class="preview-badge">预览示例</span></div>
+        <div class="chat-scene">
+          <div class="chat-date">一个链接，一点背景，一张画面</div>
+          <div class="message"><div class="message-caption" id="summary-source">链接预览 👇</div>
+            <article class="link-card" id="link-card">
+              <div id="cover-container" class="cover-container"><div id="sample-cover" class="sample-cover"><span class="cover-orbit orbit-one"></span><span class="cover-orbit orbit-two"></span><div class="cover-text"><span>LESS NOISE, MORE MEANING.</span><strong>好的分享，<br>从一个链接开始<span>。</span></strong><div class="cover-caption">A small window into something worth opening.</div></div><div class="cover-corner"><svg><use href="#i-link"/></svg></div></div><img id="cover-image" alt="网页封面" hidden></div>
+              <div class="card-body"><div id="card-site" class="card-site">Link Expand · 示例</div><h3 id="card-title">让每一个链接，都有一个好看的开场</h3><p id="card-description">标题、摘要、封面图，还有一个可以打开的链接。把值得分享的内容，好好地分享出去。</p><a id="card-url" class="card-url" href="https://example.com/" target="_blank" rel="noopener noreferrer">example.com <svg><use href="#i-arrow"/></svg></a></div>
+            </article>
+            <div class="message-time"><span id="message-time">预览</span><span class="double-check">✓✓</span></div>
+          </div>
+          <div class="chat-tip"><span class="tiny-link"><svg><use href="#i-link"/></svg></span><span id="visual-source">优先网页图片，其次视频画面与网页截图</span></div>
+        </div>
+        <div class="preview-footnote"><svg><use href="#i-image"/></svg><p>标题、摘要、图片与原始链接，都在这张卡片里。</p></div>
+      </section>
+    </div>
+    <footer><span>Made for the links worth opening.</span><span>Link Expand · 本地链接预览</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden><svg><use href="#i-check"/></svg><span></span></div>
+</body>
+</html>
