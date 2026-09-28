@@ -21,20 +21,25 @@ from linkexpand.server import App,Server
 from linkexpand.video_downloads import DownloadManager
 
 DATA=b'\x00\x00\x00\x18ftypmp42'+bytes(range(256))*16384
+ARCHIVE=b'PK\x03\x04'+bytes(range(256))*1024
 class MediaHandler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def do_GET(self):
+        if self.path=='/files-page':
+            body=b'<html><title>Download fixtures</title><video src="/test.mp4"></video><a href="/archive.zip">Archive</a></html>'
+            self.send_response(200);self.send_header('Content-Type','text/html');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body);return
+        data=ARCHIVE if self.path=='/archive.zip' else DATA
         match=re.fullmatch(r'bytes=(\d+)-(\d+)',self.headers.get('Range',''))
-        start,end=(int(match[1]),int(match[2])) if match else (0,len(DATA)-1)
+        start,end=(int(match[1]),min(int(match[2]),len(data)-1)) if match else (0,len(data)-1)
         self.send_response(206 if match else 200)
-        self.send_header('Content-Type','video/mp4')
+        self.send_header('Content-Type','application/zip' if self.path=='/archive.zip' else 'video/mp4')
         self.send_header('Content-Length',str(end-start+1))
         self.send_header('ETag','"browser-fixture"')
-        if match:self.send_header('Content-Range',f'bytes {start}-{end}/{len(DATA)}')
+        if match:self.send_header('Content-Range',f'bytes {start}-{end}/{len(data)}')
         self.end_headers()
         try:
             for offset in range(start,end+1,8192):
-                self.wfile.write(DATA[offset:min(end+1,offset+8192)])
+                self.wfile.write(data[offset:min(end+1,offset+8192)])
                 self.wfile.flush()
                 time.sleep(.01)
         except OSError:pass
@@ -81,6 +86,24 @@ def run():
                     output=Path(__file__).resolve().parents[1]/'artifacts'/'video-ui-download.mp4'
                     event.value.save_as(str(output))
                     assert hashlib.sha256(output.read_bytes()).digest()==hashlib.sha256(DATA).digest()
+                    page.locator('#download-url').fill(f'http://public.test:{media.server_port}/files-page')
+                    page.locator('#download-resolve').click()
+                    expect(page.locator('#video-choice')).to_contain_text('archive.zip')
+                    page.locator('#video-choice').select_option(label='FILE · archive.zip')
+                    page.locator('.download-advanced').first.locator('summary').click()
+                    page.locator('#download-connections').select_option('8')
+                    page.locator('#download-speed').fill('256')
+                    page.locator('#video-download').click()
+                    expect(page.locator('#video-path')).to_contain_text(re.compile(r'archive_[a-f0-9]+\.zip'),timeout=15000)
+                    expect(page.locator('#video-status')).to_have_text('下载完成')
+                    job=[item for item in app.downloads.jobs.values() if item.video.get('kind')=='file'][0]
+                    assert job.workers==8 and job.speed_limit==256000
+                    with page.expect_download() as event:page.locator('#video-save').click()
+                    archive=output.parent/'generic-ui-archive.zip';event.value.save_as(str(archive))
+                    assert archive.read_bytes()==ARCHIVE
+                    page.locator('.download-advanced').last.locator('summary').click()
+                    page.locator('#queue-refresh').click()
+                    expect(page.locator('.queue-row')).to_have_count(2)
                     page.screenshot(path=str(output.parent/'video-ui.png'),full_page=True)
                     assert not errors,errors
                     context.close()
@@ -88,6 +111,6 @@ def run():
         finally:
             app.close();server.shutdown();server.server_close();st.join()
     media.shutdown();media.server_close();mt.join()
-    print('PASS: video identification, pause/resume, exact file download, progress and v'+__version__)
+    print('PASS: X video pause/resume, HTML resource recognition, generic ZIP save, settings, queue and v'+__version__)
 
 if __name__=='__main__':run()

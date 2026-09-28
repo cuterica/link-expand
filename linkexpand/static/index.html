@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="local-token" content="__LOCAL_TOKEN__">
-  <meta name="app-version" content="0.2.0">
+  <meta name="app-version" content="0.3.0">
   <meta name="theme-color" content="#237b5b">
   <title>Link Expand · 链接预览</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -25,7 +25,7 @@
   </svg>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Link Expand 首页"><span class="brand-icon"><svg><use href="#i-link"/></svg></span><span>Link Expand<span class="brand-dot">.</span></span></a>
-    <div class="header-right"><span class="local-pill"><span class="status-dot"></span>本地运行</span><span class="version" id="app-version">v0.2.0</span></div>
+    <div class="header-right"><span class="local-pill"><span class="status-dot"></span>本地运行</span><span class="version" id="app-version">v0.3.0</span></div>
   </header>
   <main>
     <div class="intro"><div class="eyebrow">A LITTLE LINK. A BIGGER PICTURE.</div><h1>让链接，多一点内容。</h1><p>放入网址，自动展开摘要与画面。值得打开的内容，先看一眼。</p></div>
@@ -58,18 +58,24 @@
           <p id="copy-hint" class="hint">左侧复制整张图片；右侧一次复制文字、可点击链接和图片。</p>
         </div>
         <div class="panel video-panel">
-          <div class="panel-heading"><span class="step">04</span><h2>下载完整视频</h2><span class="video-limit">≤ 500 MB</span></div>
-          <p id="video-hint" class="hint">展开 X / 推特视频链接后，可下载完整 MP4。自动选择 500 MB 内的最高可用画质。</p>
-          <label for="video-choice" class="field-label">选择视频</label>
+          <div class="panel-heading"><span class="step">04</span><h2>通用下载</h2><span class="video-limit">≤ 500 MB</span></div>
+          <label for="download-url" class="field-label">文件、视频、播放清单或网页地址</label>
+          <input id="download-url" type="text" placeholder="https://… 文件 / MP4 / M3U8 / MPD / 网页" maxlength="16384">
+          <div class="resolve-buttons"><button id="download-resolve" class="button secondary">识别下载资源</button><button id="download-scan" class="button secondary">动态网页识别</button></div>
+          <details class="download-advanced"><summary>下载设置、请求头与浏览器捕获</summary><label for="download-connections" class="field-label">并行连接数</label><select id="download-connections"><option value="1">1</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option></select><label for="download-speed" class="field-label">限速 KB/s（0 为不限速）</label><input id="download-speed" type="number" min="0" max="100000" value="0"><label for="download-headers" class="field-label">请求头 JSON（选填，Cookie / Authorization 只留在本次会话）</label><textarea id="download-headers" rows="3" placeholder='{"Referer":"https://example.com/"}'></textarea><div class="capture-buttons"><button id="capture-pair" class="text-button">复制扩展配对码</button><button id="capture-load" class="text-button">读取浏览器捕获</button></div><p class="hint">复杂播放器可通过附带的 Chrome / Edge 扩展捕获已播放的媒体请求，再导入这里。</p></details>
+          <p id="video-hint" class="hint">支持普通文件、MP4 / WebM / 音频直链及点播 HLS / DASH，沿用多连接、暂停续传与重试。</p>
+          <p id="merge-component" class="hint"></p>
+          <label for="video-choice" class="field-label">选择下载资源</label>
           <select id="video-choice" disabled><option>尚未识别到视频</option></select>
-          <div class="video-actions"><button id="video-download" class="button primary" disabled><svg><use href="#i-download"/></svg><span>下载完整视频</span></button><button id="video-copy" class="button secondary" disabled><svg><use href="#i-copy"/></svg>复制视频</button></div>
+          <div class="video-actions"><button id="video-download" class="button primary" disabled><svg><use href="#i-download"/></svg><span>开始下载</span></button><button id="video-copy" class="button secondary" disabled><svg><use href="#i-copy"/></svg>复制文件</button></div>
           <div id="video-task" hidden aria-live="polite">
             <div class="video-state-row"><strong id="video-status"></strong><span id="video-percent"></span></div>
             <progress id="video-progress" max="1" value="0" aria-label="视频下载进度"></progress>
             <p id="video-detail" class="hint"></p><p id="video-path" class="video-path" hidden></p>
-            <div class="video-task-actions"><button id="video-pause" class="text-button">暂停</button><button id="video-resume" class="text-button" hidden>继续下载</button><button id="video-cancel" class="text-button">取消下载</button><button id="video-save" class="text-button" hidden>另存视频</button></div>
+            <div class="video-task-actions"><button id="video-pause" class="text-button">暂停</button><button id="video-resume" class="text-button" hidden>继续下载</button><button id="video-cancel" class="text-button">取消下载</button><button id="video-save" class="text-button" hidden>另存文件</button></div>
           </div>
           <p id="video-feedback" class="feedback error" role="status" hidden></p>
+          <details class="download-advanced"><summary>全部下载任务</summary><div id="download-queue"></div><button id="queue-refresh" class="text-button">刷新任务列表</button></details>
         </div>
         <div class="privacy-note"><svg><use href="#i-shield"/></svg><span>在本机生成 · 不上传到第三方服务 · 只访问你提供的网页</span></div>
       </section>

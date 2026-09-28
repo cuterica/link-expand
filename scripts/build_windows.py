@@ -88,25 +88,43 @@ def main():
         f"Link Expand {version} · Windows x64 免安装版\n\n"
         "双击 EXE，会自动打开现有的本地网页界面。无需安装 Python。\n"
         "将 URL 粘贴到输入框，即可自动展开摘要、图片或截图。\n"
+        "通用下载支持普通文件、视频/音频、网页资源、HLS/DASH 点播。\n"
+        "支持 1–16 连接、限速、失败重试、暂停续传与任务保存；每个任务最多 500 MB。\n"
+        "完整文件保存到系统下载文件夹的 LinkExpand-videos；完成后可复制文件。\n"
+        "HLS/DASH、分离音视频合并需要免费的 FFmpeg。已安装时自动查找；\n"
+        "也可以把 ffmpeg.exe 放到本 EXE 旁边，或设置 LINK_EXPAND_FFMPEG。\n"
+        "未安装时可用 winget install --id Gyan.FFmpeg -e（自行执行）。\n"
+        "复杂播放器可安装 browser-extension 目录中的 Chrome / Edge 扩展：\n"
+        "打开 chrome://extensions 或 edge://extensions，开启开发者模式，\n"
+        "选择‘加载已解压的扩展程序’，选中 browser-extension 文件夹。\n"
+        "在软件内复制扩展配对码；扩展内填本地地址和配对码，捕获当前标签页，\n"
+        "播放视频后刷新列表、选中资源并导入；软件内点击‘读取浏览器捕获’。\n"
+        "软件重启后需重新配对。Cookie/Authorization 不保存，续传时可重新导入。\n"
         "截图使用电脑中已安装的 Edge 或 Chrome，不包含浏览器安装包。\n"
         "使用期间请保留启动窗口；退出时关闭启动窗口，或按 Ctrl+C。\n"
-        "如果 8765 端口已被占用，请先关闭已经运行的 Link Expand。\n"
+        "如果 8765 端口已被占用，新启动会选择空闲端口；扩展内填实际本地地址。\n"
         "需要登录、验证码或 DRM 的网页或视频可能无法生成预览。\n\n"
         "项目与更新：https://github.com/cuterica/link-expand\n"
         "第三方组件许可证在压缩包 licenses 目录及 EXE 内附带。\n",
         encoding="utf-8-sig",
     )
+    extension = output / f"LinkExpand-browser-extension-{version}.zip"
+    with zipfile.ZipFile(extension, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for file in sorted((ROOT / "browser-extension").iterdir()):
+            if file.is_file(): archive.write(file, file.name)
     portable = output / (name + ".zip")
     with zipfile.ZipFile(portable, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(exe, exe.name)
         archive.write(guide, guide.name)
+        for file in sorted((ROOT / "browser-extension").iterdir()):
+            if file.is_file(): archive.write(file, str(Path("browser-extension") / file.name))
         for file in sorted(notice_dir.rglob("*")):
             if file.is_file():
                 archive.write(file, str(Path("licenses") / file.relative_to(notice_dir)))
     checksum = output / "SHA256SUMS.txt"
     checksum.write_text("".join(f"{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}\n"
-                               for file in [exe, portable]), encoding="ascii")
-    print(f"Built: {exe}\nPortable: {portable}\nChecksums: {checksum}", flush=True)
+                               for file in [exe, portable, extension]), encoding="ascii")
+    print(f"Built: {exe}\nPortable: {portable}\nExtension: {extension}\nChecksums: {checksum}", flush=True)
 
 
 if __name__ == "__main__":

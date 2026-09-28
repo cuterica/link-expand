@@ -1,6 +1,10 @@
 import http.client
 import json
 import threading
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import unquote
 import unittest
 from unittest.mock import patch
 
@@ -98,6 +102,34 @@ class ServerTests(unittest.TestCase):
         _, body, _ = self.request('/api/manual', {'url':'https://example.com','title':'No video'})
         preview = json.loads(body)
         self.assertEqual(self.request('/api/video/start', {'id':preview['id'],'video_index':1})[0],400)
+
+    def test_extension_import_is_paired_and_never_echoes_cookies(self):
+        origin={'Origin':'chrome-extension://'+'a'*32,'Sec-Fetch-Site':'cross-site'}
+        payload={'source':'https://example.com/page','candidates':[{'url':'https://cdn.example.com/movie.mp4','kind':'video','headers':{'Cookie':'secret-cookie','Referer':'https://example.com/page'}}]}
+        status,body,_=self.request('/api/capture/import',payload,origin)
+        self.assertEqual(status,200)
+        self.assertNotIn(b'secret-cookie',body)
+        self.assertEqual(json.loads(body)['resources'][0]['kind'],'video')
+        self.assertEqual(self.request('/api/capture/import',payload,dict(origin,**{'X-Local-Token':''}))[0],403)
+        self.assertEqual(self.request('/',headers=origin)[0],403)
+    def test_extension_preflight_has_one_allow_origin_header(self):
+        connection=http.client.HTTPConnection('127.0.0.1',self.server.server_port,timeout=4)
+        origin='chrome-extension://'+'a'*32
+        try:
+            connection.request('OPTIONS','/api/capture/import',headers={'Origin':origin,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,x-local-token'})
+            response=connection.getresponse();response.read()
+            self.assertEqual(response.status,204)
+            self.assertEqual([value for key,value in response.getheaders() if key.lower()=='access-control-allow-origin'],[origin])
+            self.assertIn('X-Local-Token',response.getheader('Access-Control-Allow-Headers'))
+        finally:connection.close()
+    def test_generic_file_download_preserves_unicode_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'中文文件.zip';path.write_bytes(b'PK-test')
+            job=SimpleNamespace(status='complete',file=path,filename=path.name,valid_file=lambda:True)
+            with patch.object(self.app,'_downloads',SimpleNamespace(get=lambda value:job)):
+                status,body,headers=self.request('/downloads/'+'a'*24+'/file')
+            self.assertEqual(status,200);self.assertEqual(body,b'PK-test')
+            self.assertTrue(unquote(headers['Content-Disposition']).endswith(path.name))
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import warnings
 from PIL import Image, ImageStat, UnidentifiedImageError
 
 from .metadata import MAX_IMAGE, Preview, PreviewError, concise_summary, fetch_resource
+from .owned_process import run_worker
 
 
 def image_score(data: bytes, priority=0) -> float:
@@ -63,12 +64,10 @@ def select_image(preview: Preview) -> bool:
 
 def capture_page(url: str) -> dict:
     try:
-        process = subprocess.run(
+        process = run_worker(
             ([sys.executable, "--capture-worker"] if getattr(sys, "frozen", False)
              else [sys.executable, "-m", "linkexpand.capture"]),
-            input=json.dumps({"url": url}), text=True, encoding="utf-8", capture_output=True, timeout=42,
-            check=False,
-            **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}),
+            json.dumps({"url": url}), 42,
         )
         result = json.loads(process.stdout)
         if process.returncode or "error" in result:

@@ -7,6 +7,7 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
 import json
+import mimetypes
 import os
 from pathlib import Path
 import re
@@ -14,7 +15,7 @@ import secrets
 import socket
 import sys
 import threading
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote
 import urllib.request
 import webbrowser
 
@@ -36,6 +37,22 @@ class App:
         self.fetch_slots = threading.BoundedSemaphore(2)
         self.records = OrderedDict()
         self._downloads = None
+        self.catalogs = OrderedDict()
+
+    def catalog(self,result):
+        key=secrets.token_hex(12)
+        with self.lock:
+            self.catalogs[key]=result
+            while len(self.catalogs)>24:self.catalogs.popitem(last=False)
+        return {'id':key,'source':result['source'],'title':result['title'],
+                'resources':[{'index':item['index'],'kind':item.get('kind','video'),
+                              'filename':item.get('filename',''),'qualities':[variant.get('quality','') for variant in item['variants']],
+                              'url':item['variants'][0]['url']} for item in result['resources']]}
+
+    def get_catalog(self,key):
+        with self.lock:result=self.catalogs.get(key)
+        if not result:raise PreviewError('下载资源列表已过期，请重新识别。')
+        return result
 
     @property
     def downloads(self):
@@ -139,6 +156,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("Host", "") not in hosts:
             self.respond_json(403, {"error": "仅允许本机访问。"})
             return False
+        extension_origin=self.extension_origin()
+        if extension_origin:return True
         if self.headers.get("Sec-Fetch-Site") == "cross-site":
             self.respond_json(403, {"error": "不允许跨站访问。"})
             return False
@@ -147,6 +166,19 @@ class Handler(BaseHTTPRequestHandler):
             self.respond_json(403, {"error": "不允许跨站访问。"})
             return False
         return True
+
+    def extension_origin(self):
+        value=self.headers.get('Origin','')
+        if urlsplit(self.path).path=='/api/capture/import' and re.fullmatch(r'chrome-extension://[a-p]{32}',value):return value
+        return None
+
+    def do_OPTIONS(self):
+        if not self.allowed():return
+        origin=self.extension_origin()
+        if not origin:
+            self.respond_json(403,{'error':'不允许跨站请求。'});return
+        self.respond(204,b'','text/plain',{
+            'Access-Control-Allow-Headers':'Content-Type, X-Local-Token','Access-Control-Allow-Methods':'POST, OPTIONS'})
 
     def authenticated(self):
         token = self.headers.get("X-Local-Token", "")
@@ -163,6 +195,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+        if self.extension_origin():self.send_header('Access-Control-Allow-Origin',self.extension_origin())
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         self.end_headers()
@@ -189,7 +222,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/api/capabilities':
             if self.authenticated():
                 self.respond_json(200, {'native_rich': os.name == 'nt', 'version': __version__,
-                                       'copy_video': os.name == 'nt', 'max_video_bytes': MAX_VIDEO_BYTES})
+                                       'copy_video': os.name == 'nt', 'max_video_bytes': MAX_VIDEO_BYTES,
+                                       'ffmpeg':bool(__import__('linkexpand.streaming',fromlist=['ffmpeg_path']).ffmpeg_path())})
         elif path == '/api/health':
             self.respond_json(200, {'app': 'link-expand', 'version': __version__})
         elif path == '/api/video/jobs' or re.fullmatch(r'/api/video/jobs/[a-f0-9]{24}', path):
@@ -200,9 +234,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json(200, result)
             except PreviewError as error:
                 self.respond_json(404, {'error': str(error)})
-        elif re.fullmatch(r'/downloads/[a-f0-9]{24}\.mp4', path):
+        elif path=='/api/download/catalogs':
+            if not self.authenticated():return
+            with app.lock:
+                result=[{'id':key,'source':value['source'],'title':value['title'],
+                         'count':len(value['resources'])} for key,value in app.catalogs.items()]
+            self.respond_json(200,result)
+        elif re.fullmatch(r'/downloads/[a-f0-9]{24}(?:\.mp4|/file)', path):
             try:
-                job = app.downloads.get(path.rsplit('/', 1)[1][:-4])
+                job = app.downloads.get(path.split('/')[2].removesuffix('.mp4'))
                 if job.status != 'complete' or not job.valid_file():
                     raise PreviewError('视频尚未下载完成。')
                 with job.file.open('rb') as video:
@@ -210,9 +250,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not 0 < size <= MAX_VIDEO_BYTES:
                         raise PreviewError('视频超过 500 MB。')
                     self.send_response(200)
-                    self.send_header('Content-Type', 'video/mp4')
+                    self.send_header('Content-Type', mimetypes.guess_type(job.filename)[0] or 'application/octet-stream')
                     self.send_header('Content-Length', str(size))
-                    self.send_header('Content-Disposition', f'attachment; filename="{job.filename}"')
+                    fallback=job.filename if job.filename.isascii() else 'download'+job.file.suffix
+                    self.send_header('Content-Disposition', f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{quote(job.filename,safe="")}')
                     self.send_header('Cache-Control', 'no-store')
                     self.send_header('X-Content-Type-Options', 'nosniff')
                     self.end_headers()
@@ -241,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 16384:
+            if not 0 < length <= 65536:
                 raise PreviewError("请求内容过大或为空。")
             if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/json":
                 raise PreviewError("仅支持 JSON 请求。")
@@ -267,7 +308,37 @@ class Handler(BaseHTTPRequestHandler):
                 video = next((item for item in preview.videos if item['index'] == index), None)
                 if not video:
                     raise PreviewError('请先展开含视频的 X / 推特链接，再选择视频。')
+                video=dict(video)
+                connections=data.get('connections',4);speed=data.get('speed_limit',0)
+                if not isinstance(connections,int) or not 1<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
+                    raise PreviewError('连接数或限速参数无效。')
+                video['options']={'connections':connections,'speed_limit':speed}
                 result = app.downloads.start(video, preview.url)
+            elif path=='/api/download/resolve':
+                from .media_resolver import resolve
+                if not app.fetch_slots.acquire(blocking=False):raise PreviewError('正在处理其他链接，请稍后重试。')
+                try:result=app.catalog(resolve(str(data.get('url','')),data.get('headers'),data.get('scan') is True))
+                finally:app.fetch_slots.release()
+            elif path=='/api/capture/import':
+                from .media_resolver import imported_candidates
+                candidates=data.get('candidates')
+                if not isinstance(candidates,list):raise PreviewError('捕获数据格式无效。')
+                result=app.catalog(imported_candidates(str(data.get('source','')),candidates))
+            elif path=='/api/download/start':
+                catalog=app.get_catalog(str(data.get('catalog_id','')))
+                item=next((resource for resource in catalog['resources'] if resource['index']==data.get('index')),None)
+                if not item:raise PreviewError('请选择下载资源。')
+                item=dict(item)
+                connections=data.get('connections',4);speed=data.get('speed_limit',0)
+                if not isinstance(connections,int) or not 1<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
+                    raise PreviewError('连接数或限速参数无效。')
+                item['options']={'connections':connections,'speed_limit':speed}
+                result=app.downloads.start(item,catalog['source'])
+            elif path=='/api/download/catalog':
+                key=str(data.get('id',''));catalog=app.get_catalog(key)
+                result={'id':key,'source':catalog['source'],'title':catalog['title'],
+                        'resources':[{'index':item['index'],'kind':item.get('kind','video'),'filename':item.get('filename',''),
+                                      'qualities':[variant.get('quality','') for variant in item['variants']]} for item in catalog['resources']]}
             elif path in {'/api/video/pause', '/api/video/resume', '/api/video/cancel', '/api/video/copy'}:
                 job = app.downloads.get(str(data.get('job_id', '')))
                 if path.endswith('/resume'):

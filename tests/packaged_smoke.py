@@ -123,8 +123,8 @@ def main():
                         time.sleep(.3)
                 assert 'Link Expand' in html
                 with urllib.request.urlopen(base + '/api/health', timeout=5) as response:
-                    assert json.load(response) == {'app': 'link-expand', 'version': '0.2.0'}
-                assert 'v0.2.0' in html
+                    assert json.load(response) == {'app': 'link-expand', 'version': '0.3.0'}
+                assert 'v0.3.0' in html
                 token = re.search(r'name="local-token" content="([^"]+)"', html).group(1)
                 for url, expected in [
                     ('https://github.com', '网页封面'),
@@ -174,6 +174,19 @@ def main():
                     verify_video_file_clipboard(job['path'])
                 print(json.dumps({'PASS':'X whole video and file clipboard','size':len(data),
                     'quality':job['quality'],'file':job['path']}),flush=True)
+                catalog=post('/api/download/resolve',{'url':'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4','scan':True})
+                generic=post('/api/download/start',{'catalog_id':catalog['id'],'index':catalog['resources'][0]['index'],'connections':8})
+                deadline=time.monotonic()+60
+                while generic['status'] not in {'complete','error','cancelled'} and time.monotonic()<deadline:
+                    time.sleep(.25)
+                    request=urllib.request.Request(base+'/api/video/jobs/'+generic['id'],headers={'X-Local-Token':token})
+                    with urllib.request.urlopen(request,timeout=10) as response:generic=json.load(response)
+                assert generic['status']=='complete',generic
+                assert generic['filename'].endswith('.mp4')
+                with urllib.request.urlopen(base+'/downloads/'+generic['id']+'/file',timeout=20) as response:
+                    generic_data=response.read()
+                assert hashlib.sha256(generic_data).hexdigest()==generic['sha256']
+                print(json.dumps({'PASS':'generic direct media','filename':generic['filename'],'size':len(generic_data)}),flush=True)
             finally:
                 if os.name == 'nt':
                     subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],

@@ -187,6 +187,18 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(state['status'], 'cancelled', state)
         self.assertFalse(job.part.exists())
 
+    def test_generic_file_and_secret_headers_are_not_persisted(self):
+        video=self.video();video['kind']='file';video['filename']='archive.zip'
+        video['credential_origin']='http://video.twimg.com/'
+        video['variants'][0]['headers']={'Cookie':'private-cookie','Authorization':'Bearer private-token'}
+        job=self.start(video);state=self.wait(job)
+        self.assertEqual(state['status'],'complete',state)
+        self.assertTrue(job.filename.endswith('.zip'))
+        self.assertEqual(job.file.read_bytes(),VIDEO)
+        saved=job.state_file.read_text()
+        self.assertNotIn('private-cookie',saved)
+        self.assertNotIn('private-token',saved)
+
 
 if __name__ == '__main__':
     unittest.main()

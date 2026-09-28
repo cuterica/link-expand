@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Link Expand Media Capture",
+  "version": "0.3.0",
+  "description": "Capture downloadable media from a tab you explicitly enable, and send it to your local Link Expand.",
+  "permissions": ["storage", "activeTab", "webRequest"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {"service_worker": "worker.js"},
+  "action": {"default_popup": "popup.html"}
+}

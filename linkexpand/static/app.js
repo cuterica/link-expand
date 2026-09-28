@@ -16,6 +16,7 @@ let canCopyVideo = false;
 let videoJob = null;
 let videoJobId = null;
 let videoPolling = false;
+let downloadCatalog = null;
 const actionIds = ['copy-image', 'copy-text', 'download', 'download-cover'];
 
 async function api(path, data, signal) {
@@ -52,6 +53,8 @@ function setBusy(value) {
 async function display(preview, job) {
   if (job !== revision) return;
   current = preview;
+  downloadCatalog = null;
+  $('download-url').value = preview.url;
   displayVideoChoices(preview);
   cardBlob = null;
   $('card-site').textContent = preview.site_name;
@@ -193,12 +196,13 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
     if (capabilities.version !== expectedVersion) throw new Error('页面与后台版本不一致，请关闭旧程序并重新启动新版。');
     nativeRich = capabilities.native_rich;
     canCopyVideo = capabilities.copy_video;
+    $('merge-component').textContent = capabilities.ffmpeg ? 'HLS / DASH 合并组件：已就绪' : 'HLS / DASH 合并需要免费的 FFmpeg；文件和普通视频直链不需要。';
     clipboardReady = true;
     $('copy-hint').textContent = nativeRich
       ? 'Windows 图文复制已启用：右侧一次复制图片、标题、摘要与真实链接。'
       : '图文复制已启用：右侧包含图片和可点击链接，适用于支持富文本的粘贴目标。';
     setBusy(busy);
-    $('video-download').disabled = !(current?.videos?.length);
+    $('video-download').disabled = !(downloadCatalog?.resources?.length || current?.videos?.length);
     restoreVideoJob();
   })
   .catch(error => { clipboardReady = false; $('copy-text').disabled = true; $('video-download').disabled = true; feedback(error.message, true); });
@@ -220,7 +224,7 @@ function displayVideoChoices(preview) {
   $('video-download').disabled = !videos.length || !clipboardReady;
   $('video-hint').textContent = videos.length
     ? `识别到 ${videos.length} 个视频。多连接下载，可暂停续传；优先选择 500 MB 内的最高可用画质。`
-    : '展开 X / 推特视频链接后，可下载完整 MP4。自动选择 500 MB 内的最高可用画质。';
+    : '也可以在下方输入文件、视频或网页地址，识别通用下载资源。';
 }
 
 function videoError(message) {
@@ -238,24 +242,24 @@ function displayVideoJob(job) {
   try { localStorage.setItem('linkexpand-video-job', job.id); } catch (_) {}
   $('video-task').hidden = false;
   const labels = {queued: '排队中', resolving: '读取视频信息', downloading: '正在下载',
-    pausing: '暂停中', paused: '已暂停', verifying: '检查完整性', complete: '下载完成',
+    pausing: '暂停中', paused: '已暂停', merging: '正在合并音视频', verifying: '检查完整性', complete: '下载完成',
     cancelling: '取消中', cancelled: '已取消', error: '下载失败'};
   $('video-status').textContent = labels[job.status] || job.status;
   $('video-percent').textContent = job.progress == null ? '' : Math.round(job.progress * 100) + '%';
   if (job.progress == null) $('video-progress').removeAttribute('value');
   else $('video-progress').value = job.progress;
   $('video-detail').textContent = [job.quality, `${sizeText(job.downloaded)} / ${job.total ? sizeText(job.total) : '大小未知'}`,
-    job.speed ? `${sizeText(job.speed)}/秒` : ''].filter(Boolean).join(' · ');
+    job.speed ? `${sizeText(job.speed)}/秒` : '',job.fragments ? `${job.fragments} 个分段已保存` : ''].filter(Boolean).join(' · ');
   $('video-pause').hidden = !['queued', 'resolving', 'downloading'].includes(job.status);
   $('video-resume').hidden = !['paused', 'error'].includes(job.status);
-  $('video-resume').textContent = job.resumable ? '继续下载' : '重新下载';
+  $('video-resume').textContent = job.resumable || job.fragments ? '继续下载' : '重新下载';
   $('video-cancel').hidden = ['complete', 'cancelled'].includes(job.status);
   $('video-save').hidden = job.status !== 'complete';
   $('video-copy').disabled = job.status !== 'complete' || !canCopyVideo;
   $('video-path').hidden = !job.path;
   $('video-path').textContent = job.path ? '已保存到：' + job.path : '';
-  videoError(job.error || '');
-  if (['queued', 'resolving', 'downloading', 'pausing', 'verifying', 'cancelling'].includes(job.status)) pollVideoJob();
+  videoError(job.error || (job.credentials_missing && job.status !== 'complete' ? '这个任务需要重新提供请求头。请再次识别地址或从浏览器扩展导入，然后点击下载以继续。' : ''));
+  if (['queued', 'resolving', 'downloading', 'pausing', 'merging', 'verifying', 'cancelling'].includes(job.status)) pollVideoJob();
 }
 
 async function getVideoJob(id) {
@@ -289,12 +293,19 @@ async function pollVideoJob() {
 }
 
 $('video-download').addEventListener('click', async () => {
-  if (!current || !clipboardReady || !$('video-choice').value) return;
+  if ((!current && !downloadCatalog) || !clipboardReady || !$('video-choice').value) return;
   $('video-download').disabled = true;
   videoError('');
-  try { displayVideoJob(await api('/api/video/start', {id: current.id, video_index: Number($('video-choice').value)})); }
+  try {
+    const job=downloadCatalog
+      ? await api('/api/download/start',{catalog_id:downloadCatalog.id,index:Number($('video-choice').value),
+          connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000})
+      : await api('/api/video/start', {id: current.id, video_index: Number($('video-choice').value),
+          connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000});
+    displayVideoJob(job);refreshQueue();
+  }
   catch (error) { videoError(error.message); }
-  finally { $('video-download').disabled = !(current?.videos?.length) || !clipboardReady; }
+  finally { $('video-download').disabled = !(downloadCatalog?.resources?.length || current?.videos?.length) || !clipboardReady; }
 });
 
 for (const action of ['pause', 'resume', 'cancel']) {
@@ -311,13 +322,61 @@ $('video-copy').addEventListener('click', async () => {
   if (!videoJobId || videoJob?.status !== 'complete') return;
   try {
     await api('/api/video/copy', {job_id: videoJobId});
-    toast('完整视频文件已复制，可粘贴到微信 / QQ 或文件夹');
+    toast('完整文件已复制，可粘贴到聊天或资源管理器');
   } catch (error) { videoError(error.message); }
 });
 $('video-save').addEventListener('click', () => {
   if (!videoJobId || videoJob?.status !== 'complete') return;
   const link = document.createElement('a');
-  link.href = '/downloads/' + videoJobId + '.mp4';
+  link.href = '/downloads/' + videoJobId + '/file';
   link.download = videoJob.filename;
   link.click();
 });
+
+function displayCatalog(catalog) {
+  downloadCatalog=catalog;
+  $('video-choice').replaceChildren();
+  for (const item of catalog.resources) $('video-choice').add(new Option(`${item.kind.toUpperCase()} · ${item.filename || item.qualities[0] || '资源 '+item.index}`,item.index));
+  $('video-choice').disabled=!catalog.resources.length;
+  $('video-download').disabled=!catalog.resources.length || !clipboardReady;
+  $('video-hint').textContent=`${catalog.title} · 找到 ${catalog.resources.length} 个可下载资源`;
+  videoError('');
+}
+async function resolveDownload(scan) {
+  if (!clipboardReady)return;
+  const url=$('download-url').value.trim() || $('url-input').value.trim();
+  if (!url) {videoError('请输入下载地址。');return;}
+  const buttons=[$('download-resolve'),$('download-scan')];buttons.forEach(button=>button.disabled=true);
+  videoError('');$('video-hint').textContent=scan?'动态识别中，最多等待约 28 秒…':'正在识别文件和媒体资源…';
+  try {
+    const headers=$('download-headers').value.trim()?JSON.parse($('download-headers').value):{};
+    displayCatalog(await api('/api/download/resolve',{url,headers,scan}));
+  } catch (error) {videoError(error.message);}
+  finally {buttons.forEach(button=>button.disabled=false);}
+}
+$('download-resolve').addEventListener('click',()=>resolveDownload(false));
+$('download-scan').addEventListener('click',()=>resolveDownload(true));
+$('download-url').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();resolveDownload(false);}});
+$('capture-pair').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(token);toast('配对码已复制，粘贴到浏览器捕获扩展；程序重启后需重新配对。');}catch(error){videoError(error.message);}});
+$('capture-load').addEventListener('click',async()=>{
+  try {
+    const response=await fetch('/api/download/catalogs',{headers:{'X-Local-Token':token}});
+    const catalogs=await response.json();if(!response.ok)throw new Error(catalogs.error);
+    if(!catalogs.length)throw new Error('尚未导入浏览器捕获资源。');
+    const last=catalogs[catalogs.length-1];
+    displayCatalog(await api('/api/download/catalog',{id:last.id}));
+  }catch(error){videoError(error.message);}
+});
+async function refreshQueue() {
+  try {
+    const response=await fetch('/api/video/jobs',{headers:{'X-Local-Token':token}});
+    const jobs=await response.json();if(!response.ok)throw new Error(jobs.error);
+    $('download-queue').replaceChildren();
+    for(const job of jobs.slice().reverse()){
+      const row=document.createElement('button');row.className='queue-row';
+      row.textContent=`${job.status} · ${job.filename || job.source} · ${sizeText(job.downloaded)}`;
+      row.addEventListener('click',()=>displayVideoJob(job));$('download-queue').append(row);
+    }
+  }catch(error){videoError(error.message);}
+}
+$('queue-refresh').addEventListener('click',refreshQueue);
