@@ -1,11 +1,17 @@
 import base64
+from io import BytesIO
 from html.parser import HTMLParser
-from pathlib import PureWindowsPath
+from pathlib import Path, PureWindowsPath
 import re
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
-from linkexpand.clipboard import cf_html, chat_xml
+from PIL import Image
+
+from linkexpand.clipboard import cf_html, chat_xml, copy_rich
 from linkexpand.metadata import Preview
 from linkexpand.sharing import rich_html
 
@@ -66,6 +72,20 @@ class SharingTests(unittest.TestCase):
         elements = root.findall('EditElement')
         self.assertEqual(elements[0].attrib['filepath'], str(path))
         self.assertEqual(elements[1].text, '\n' + text)
+
+    def test_preview_without_cover_still_copies_card_image(self):
+        image = BytesIO()
+        Image.new('RGB', (480, 180), 'white').save(image, 'PNG')
+        record = {'preview': self.preview(), 'cover': None, 'png': image.getvalue()}
+        with tempfile.TemporaryDirectory() as folder, \
+                patch('linkexpand.clipboard.os', SimpleNamespace(name='nt', environ={'LOCALAPPDATA': folder})), \
+                patch('linkexpand.clipboard.set_formats') as formats:
+            copy_rich(record, 'abc123')
+            payloads = dict(formats.call_args.args[0])
+            tree = ET.fromstring(payloads['QQ_Unicode_RichEdit_Format'].rstrip(b'\0'))
+            picture = tree.find("EditElement[@type='1']")
+            self.assertIsNotNone(picture)
+            self.assertEqual(Path(picture.attrib['filepath']).read_bytes(), record['png'])
 
 
 if __name__ == '__main__':

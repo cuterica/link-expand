@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from linkexpand.metadata import Preview
+from linkexpand import __version__
 from linkexpand.server import App, Server
 
 
@@ -39,6 +40,14 @@ class ServerTests(unittest.TestCase):
         self.assertIn(self.app.token.encode(), body)
         self.assertNotIn(b"__LOCAL_TOKEN__", body)
 
+    def test_running_backend_reports_current_version(self):
+        status, body, _ = self.request('/api/health')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {'app': 'link-expand', 'version': __version__})
+        status, body, _ = self.request('/api/capabilities')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)['version'], __version__)
+
     def test_api_rejects_missing_token_and_cross_site_origin(self):
         cases = [{"X-Local-Token": ""}, {"Origin": "https://attacker.example"},
                  {"Host": "attacker.example"}, {"Sec-Fetch-Site": "cross-site"}]
@@ -56,7 +65,8 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(headers["Content-Type"], "image/png")
         self.assertTrue(body.startswith(b"\x89PNG"))
-        status, body, _ = self.request("/api/edit", dict(preview, title="更新标题"))
+        status, body, _ = self.request("/api/edit", {"id": preview['id'], "url": preview['url'],
+            "title": "更新标题", "description": preview['description'], "site_name": preview['site_name']})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["title"], "更新标题")
 

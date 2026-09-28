@@ -18,7 +18,7 @@ def rich_html(preview: Preview, cover: bytes | None, image_uri: str | None = Non
             '<tr><td style="padding:0;">'
             f'<a href="{url}" target="_blank" rel="noopener noreferrer">'
             f'<img src="{escape(source, quote=True)}" alt="{escape(preview.title, quote=True)}" '
-            'width="480" height="240" style="display:block;border:0;width:480px;max-width:100%;height:auto;">'
+            'width="480" style="display:block;border:0;width:480px;max-width:100%;height:auto;">'
             '</a></td></tr>'
         )
     summary = (f'<p style="margin:8px 0 12px;font-size:14px;line-height:1.7;color:#62736c;">'

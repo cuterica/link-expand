@@ -56,6 +56,7 @@ def ui_check():
             page = context.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(f"http://127.0.0.1:{server.server_port}")
+            expect(page.locator('#app-version')).to_have_text('v0.1.1')
             assert page.locator("#watch-toggle").count() == 0
             assert page.locator("#paste-wechat").count() == 0
             page.screenshot(path=str(ARTIFACTS / "interface.png"), full_page=True)
@@ -102,10 +103,20 @@ def ui_check():
             page.set_viewport_size({"width": 390, "height": 844})
             page.screenshot(path=str(ARTIFACTS / "mobile.png"), full_page=True)
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            legacy = context.new_page()
+            legacy.route('**/api/capabilities', lambda route: route.fulfill(
+                status=404, content_type='application/json', body='{"error":"old server"}'))
+            legacy.goto(f"http://127.0.0.1:{server.server_port}")
+            expect(legacy.locator('#feedback')).to_contain_text('旧后台')
+            legacy.locator('#url-input').fill('https://fixture.example/legacy')
+            expect(legacy.locator('#card-title')).to_contain_text('legacy')
+            expect(legacy.locator('#copy-image')).to_be_enabled()
+            expect(legacy.locator('#copy-text')).to_be_disabled()
+            legacy.close()
             context.close()
             browser.close()
         assert not errors, errors
-        print("PASS: expansion, stale results, editing, image clipboard, rich HTML paste with image and links, download, responsive layout")
+        print("PASS: expansion, editing, image and rich clipboard, download, layout, visible version, old backend cannot silently copy")
     finally:
         server.shutdown()
         server.server_close()

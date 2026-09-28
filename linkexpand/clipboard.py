@@ -101,7 +101,7 @@ def set_formats(payloads):
 def copy_rich(record, key: str):
     if os.name != 'nt':
         raise PreviewError('当前系统请使用浏览器图文复制。')
-    preview, cover = record['preview'], record['cover']
+    preview, cover = record['preview'], record['cover'] or record['png']
     with LOCK:
         image_path = None
         cache = Path(os.environ['LOCALAPPDATA']) / 'LinkExpand' / 'clipboard'

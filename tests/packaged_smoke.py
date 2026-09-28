@@ -93,6 +93,9 @@ def main():
                             raise RuntimeError('Packaged application did not start.')
                         time.sleep(.3)
                 assert 'Link Expand' in html
+                with urllib.request.urlopen(base + '/api/health', timeout=5) as response:
+                    assert json.load(response) == {'app': 'link-expand', 'version': '0.1.1'}
+                assert 'v0.1.1' in html
                 token = re.search(r'name="local-token" content="([^"]+)"', html).group(1)
                 for url, expected in [
                     ('https://github.com', '网页封面'),

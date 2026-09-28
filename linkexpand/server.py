@@ -11,11 +11,14 @@ import os
 from pathlib import Path
 import re
 import secrets
+import socket
 import sys
 import threading
 from urllib.parse import urlsplit
+import urllib.request
 import webbrowser
 
+from . import __version__
 from .cards import original_visual, render_card, thumbnail
 from .clipboard import copy_rich
 from .metadata import Preview, PreviewError, clean_text, get_preview, normalize_url, plain_text
@@ -49,7 +52,7 @@ class App:
                 "site_name": preview.site_name, "warnings": preview.warnings,
                 "visual_source": preview.visual_source, "summary_source": preview.summary_source,
                 "text": plain_text(preview), "image": f"/assets/{key}/card.png",
-                "html": rich_html(preview, record["cover"]),
+                "html": rich_html(preview, record["cover"] or record['png']),
                 "cover": f"/assets/{key}/cover.png" if record["cover"] else None,
                 "visual": f"/assets/{key}/visual.png" if record["visual"] else None}
 
@@ -91,10 +94,17 @@ class App:
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
+    # Windows must not allow multiple processes to bind the same app address.
+    allow_reuse_address = os.name != 'nt'
 
     def __init__(self, address, app):
         self.app = app
         super().__init__(address, Handler)
+
+    def server_bind(self):
+        if os.name == 'nt' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -159,7 +169,9 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(200, (STATIC / path[1:]).read_bytes(), mime)
         elif path == '/api/capabilities':
             if self.authenticated():
-                self.respond_json(200, {'native_rich': os.name == 'nt'})
+                self.respond_json(200, {'native_rich': os.name == 'nt', 'version': __version__})
+        elif path == '/api/health':
+            self.respond_json(200, {'app': 'link-expand', 'version': __version__})
         elif re.fullmatch(r"/assets/[a-f0-9]{24}/(card|cover|visual)\.png", path):
             # Assets are session-local, unguessable IDs; no arbitrary file paths.
             _, _, key, filename = path.split("/")
@@ -215,14 +227,28 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Link Expand · 本地链接预览")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
     app = App()
+    preferred_port = args.port if args.port is not None else 8765
     try:
-        server = Server(("127.0.0.1", args.port), app)
+        server = Server(("127.0.0.1", preferred_port), app)
     except OSError as error:
-        parser.exit(1, f"无法启动：{error}。可使用 --port 8766 更换端口。\n")
+        if args.port is not None or args.no_browser:
+            parser.exit(1, f"无法启动：{error}。可使用 --port 8766 更换端口。\n")
+        existing_url = f'http://127.0.0.1:{preferred_port}'
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(existing_url + '/api/health', timeout=2) as response:
+                existing = json.load(response)
+            if existing == {'app': 'link-expand', 'version': __version__}:
+                webbrowser.open(existing_url)
+                return
+        except (OSError, ValueError):
+            pass
+        # An old server or a different program must not serve the new UI's requests.
+        server = Server(('127.0.0.1', 0), app)
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"Link Expand 已启动：{url}\n按 Ctrl+C 退出。", flush=True)
     if not args.no_browser:

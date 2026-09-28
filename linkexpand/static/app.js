@@ -1,6 +1,7 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="local-token"]').content;
+const expectedVersion = document.querySelector('meta[name="app-version"]').content;
 let current = null;
 let busy = false;
 let cardBlob = null;
@@ -10,6 +11,7 @@ let lastRequested = '';
 let revision = 0;
 let requestController = null;
 let nativeRich = false;
+let clipboardReady = false;
 const actionIds = ['copy-image', 'copy-text', 'download', 'download-cover'];
 
 async function api(path, data, signal) {
@@ -39,6 +41,7 @@ function setBusy(value) {
   $('generate').querySelector('span').textContent = value ? '正在展开，请稍候…' : '展开链接';
   $('save-edit').disabled = value;
   actionIds.forEach(id => { $(id).disabled = value || !current; });
+  $('copy-text').disabled = value || !current || !clipboardReady;
   if (!value) $('download-cover').disabled = !current?.cover;
 }
 
@@ -149,7 +152,7 @@ $('copy-image').addEventListener('click', async () => {
 });
 
 $('copy-text').addEventListener('click', async () => {
-  if (!current || busy) return;
+  if (!current || busy || !clipboardReady) return;
   try {
     if (nativeRich) {
       await api('/api/copy-rich', {id: current.id});
@@ -176,6 +179,18 @@ $('download').addEventListener('click', () => download(current?.image, 'link-pre
 $('download-cover').addEventListener('click', () => download(current?.visual, 'link-image.png'));
 
 fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
-  .then(response => { if (!response.ok) throw new Error('会话已更新，请刷新页面。'); return response.json(); })
-  .then(capabilities => { nativeRich = capabilities.native_rich; })
-  .catch(error => feedback(error.message, true));
+  .then(response => {
+    if (response.status === 404) throw new Error('当前连接的是旧后台，图文复制没有启用。请关闭旧程序并重新启动新版。');
+    if (!response.ok) throw new Error('后台已切换，请刷新页面重新连接。');
+    return response.json();
+  })
+  .then(capabilities => {
+    if (capabilities.version !== expectedVersion) throw new Error('页面与后台版本不一致，请关闭旧程序并重新启动新版。');
+    nativeRich = capabilities.native_rich;
+    clipboardReady = true;
+    $('copy-hint').textContent = nativeRich
+      ? 'Windows 图文复制已启用：右侧一次复制图片、标题、摘要与真实链接。'
+      : '图文复制已启用：右侧包含图片和可点击链接，适用于支持富文本的粘贴目标。';
+    setBusy(busy);
+  })
+  .catch(error => { clipboardReady = false; $('copy-text').disabled = true; feedback(error.message, true); });
