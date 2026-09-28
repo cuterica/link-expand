@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from linkexpand.metadata import (MAX_HTML, PreviewError, Resource, decode_html,
                                  extract_metadata, fetch_resource, get_preview,
-                                 normalize_url, public_addresses)
+                                 normalize_url, public_addresses, http_error_message)
 
 
 def resource(html, url="https://example.com/articles/a", content_type="text/html; charset=utf-8"):
@@ -13,6 +13,15 @@ def resource(html, url="https://example.com/articles/a", content_type="text/html
 
 
 class MetadataTests(unittest.TestCase):
+    def test_bilibili_412_explains_rejected_request_and_real_browser_path(self):
+        url='https://www.bilibili.com/video/BV1cSec6tEux/'
+        connection=Mock();response=connection.getresponse.return_value;response.status=412
+        with patch('linkexpand.metadata.public_addresses',return_value=['93.184.216.34']), \
+             patch('linkexpand.metadata.PinnedHTTPSConnection',return_value=connection):
+            with self.assertRaisesRegex(PreviewError,'安全风控.*HTTP 412.*浏览器捕获'):
+                fetch_resource(url)
+        self.assertNotIn('请检查链接',http_error_message(url,412))
+        self.assertNotIn('B 站',http_error_message('https://www.bilibili.com.example.org/',412))
     def test_open_graph_wins_and_entities_are_decoded(self):
         preview = extract_metadata(resource('''<title>Fallback</title>
             <meta property="og:title" content="你好 &amp; world">

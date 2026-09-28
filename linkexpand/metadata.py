@@ -24,6 +24,16 @@ class PreviewError(ValueError):
     pass
 
 
+def http_error_message(url: str, status: int) -> str:
+    host=urlsplit(url).hostname or ''
+    if status==412 and (host=='bilibili.com' or host.endswith('.bilibili.com')):
+        return ('B 站安全风控拦截了本次访问（HTTP 412）。请在 Chrome 中打开此链接并完成网站验证；'
+                '如果浏览器能正常播放，可用浏览器捕获扩展导入媒体后下载。直接粘贴网页地址尚不能可靠通过此验证。')
+    if status in {401,403,429}:
+        return '该网站限制访问或需要登录。可以使用手动编辑创建卡片。'
+    return f'网页返回 HTTP {status}，请检查链接。'
+
+
 def clean_text(value: str, limit: int = 500) -> str:
     # Remove control characters, collapse whitespace, and bound untrusted text.
     value = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", value)
@@ -143,9 +153,7 @@ def fetch_resource(url: str, limit: int = MAX_HTML, timeout: float = 25, headers
                 current = normalize_url(urljoin(current, location))
                 continue
             if response.status >= 400:
-                if response.status in {401, 403, 429}:
-                    raise PreviewError("该网站限制访问或需要登录。可以使用手动编辑创建卡片。")
-                raise PreviewError(f"网页返回 HTTP {response.status}，请检查链接。")
+                raise PreviewError(http_error_message(current,response.status))
             length = response.getheader("Content-Length", "")
             if length.isdigit() and int(length) > limit:
                 raise PreviewError("网页或图片过大，无法生成预览。")

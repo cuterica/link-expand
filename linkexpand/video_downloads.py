@@ -19,7 +19,7 @@ import time
 from urllib.parse import urljoin, urlsplit
 
 from .metadata import (PinnedHTTPConnection, PinnedHTTPSConnection, PreviewError,
-                       normalize_url, public_addresses)
+                       normalize_url, public_addresses, http_error_message)
 from .download_http import resource_url, checked_headers, scoped_headers, public_headers
 
 MAX_VIDEO_BYTES = 500_000_000
@@ -64,6 +64,7 @@ def open_video(url, headers=None, request_headers=None, credential_origin=None,a
             if response.status in {429, 500, 502, 503, 504}:
                 raise RetryableHTTP('视频服务器暂时繁忙，请重试。')
             if response.status not in {200, 206}:
+                if response.status==412:raise PreviewError(http_error_message(current,response.status))
                 raise PreviewError(f'资源服务器返回 HTTP {response.status}，请检查地址或请求头后重试。')
             if not allow_compressed and response.getheader('Content-Encoding', 'identity') not in {'identity', ''}:
                 raise PreviewError('视频响应使用了不支持的压缩格式。')
