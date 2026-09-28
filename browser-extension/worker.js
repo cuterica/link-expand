@@ -40,7 +40,7 @@ chrome.webRequest.onResponseStarted.addListener(details => {
     if (!kind || details.url.includes('127.0.0.1') || details.url.includes('localhost')) return;
     tab.resources ||= [];
     if (!tab.resources.some(r => r.url === details.url)) {
-      tab.resources.push({url: details.url, kind, headers: (capturedHeaders ? await capturedHeaders : null) || {Referer: tab.source}});
+      tab.resources.push({url: details.url, kind, mime, headers: (capturedHeaders ? await capturedHeaders : null) || {Referer: tab.source}});
       tab.resources = tab.resources.slice(-64);
       await chrome.storage.session.set({captureState: tabs});
     }

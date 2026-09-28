@@ -35,6 +35,8 @@ class GenericTests(unittest.TestCase):
         self.assertTrue(item['filename'].endswith('.mp4'))
         stream=candidate_resource({'url':'https://example.com/index.m3u8','kind':'hls'},1,'https://example.com/',{},'https://example.com/')
         self.assertEqual(stream['filename'],'index.mp4')
+        webm=candidate_resource({'url':'https://example.com/videoplayback','kind':'video','mime':'video/webm'},1,'https://example.com/',{},'https://example.com/')
+        self.assertEqual(webm['filename'],'videoplayback.webm')
     def test_hls_ranges_maps_keys_and_discontinuity(self):
         text='#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:7\n#EXT-X-MAP:URI="init.mp4",BYTERANGE="20@0"\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin",IV=0x1\n#EXTINF:2,\n#EXT-X-BYTERANGE:100@20\na.mp4\n#EXT-X-DISCONTINUITY\n#EXTINF:3,\n#EXT-X-BYTERANGE:50\na.mp4\n#EXT-X-ENDLIST\n'
         track=hls_media(text,'https://example.com/list.m3u8')

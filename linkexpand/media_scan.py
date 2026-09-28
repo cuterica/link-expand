@@ -63,7 +63,7 @@ async def inspect_page(url,headers):
                     if kind in {'hls','dash','video','audio'}:
                         copied={'Referer':request.headers.get('referer') or url,'User-Agent':request.headers.get('user-agent') or 'Mozilla/5.0'}
                         copied.update(scoped_headers(headers,request.url,url))
-                        captured[request.url]={'url':request.url,'kind':kind,'headers':copied}
+                        captured[request.url]={'url':request.url,'kind':kind,'mime':mime,'headers':copied}
                     await route.fulfill(status=status,body=body,content_type=mime or 'application/octet-stream',headers=response_headers)
             except (PreviewError,OSError,BrowserError):
                 try:await route.abort()

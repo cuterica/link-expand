@@ -12,6 +12,7 @@ from unittest.mock import patch
 from linkexpand.video_downloads import DownloadManager
 
 VIDEO = b'\x00\x00\x00\x18ftypmp42' + bytes(range(256)) * 4096
+WEBM = b'\x1aE\xdf\xa3'+VIDEO[4:]
 
 
 class VideoHandler(BaseHTTPRequestHandler):
@@ -36,9 +37,9 @@ class VideoHandler(BaseHTTPRequestHandler):
         ranged = requested and marker not in {'/single.mp4', '/unknown.mp4'}
         match = re.fullmatch(r'bytes=(\d+)-(\d+)', requested or '')
         start, end = (int(match[1]), int(match[2])) if ranged else (0, len(VIDEO)-1)
-        data = VIDEO[start:end+1]
+        data = (WEBM if marker=='/webm-unnamed' else VIDEO)[start:end+1]
         self.send_response(206 if ranged else 200)
-        self.send_header('Content-Type', 'video/mp4')
+        self.send_header('Content-Type', 'video/webm' if marker=='/webm-unnamed' else 'video/mp4')
         if marker != '/unknown.mp4':
             self.send_header('Content-Length', str(len(data)))
         self.send_header('ETag', '"video-v1"')
@@ -115,6 +116,12 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(state['sha256'], hashlib.sha256(VIDEO).hexdigest())
         self.assertGreater(len(VideoHandler.requests), 4)
         self.assertTrue(any(request[2] == '"video-v1"' for request in VideoHandler.requests))
+    def test_extensionless_webm_uses_real_container(self):
+        video=self.video(variants=[{'url':'http://media.example.com/webm-unnamed','quality':'WEBM'}])
+        video.update(kind='video',filename='videoplayback.mp4')
+        job=self.start(video);state=self.wait(job)
+        self.assertEqual(state['status'],'complete',state)
+        self.assertEqual(job.file.suffix,'.webm');self.assertEqual(job.file.read_bytes(),WEBM)
 
     def test_size_limit_selects_smaller_quality(self):
         video = self.video(variants=[{'url': 'http://video.twimg.com/huge.mp4', 'quality': '1920×1080'},

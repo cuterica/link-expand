@@ -85,7 +85,8 @@ def probe_video(url, request_headers=None, credential_origin=None):
             raise PreviewError('视频文件为空。')
         etag = response.getheader('ETag', '')
         validator = etag if etag and not etag.startswith('W/') else response.getheader('Last-Modified', '')
-        return {'url': url, 'size': size, 'range': bool(content_range), 'validator': validator}
+        return {'url': url, 'size': size, 'range': bool(content_range), 'validator': validator,
+                'mime':response.getheader('Content-Type','').split(';',1)[0].lower()}
 
 
 def downloads_directory():
@@ -255,6 +256,9 @@ class DownloadJob:
                 from .media_resolver import safe_filename
                 name=safe_filename(self.video['filename'])
                 base=Path(name).stem or 'download';suffix=Path(name).suffix or ('.mp4' if self.video.get('kind')=='video' else '.bin')
+                media_suffix={'video/webm':'.webm','audio/webm':'.webm','video/mp4':'.mp4','audio/mp4':'.m4a',
+                              'audio/mpeg':'.mp3','audio/ogg':'.ogg','video/quicktime':'.mov'}.get(candidate.get('mime'))
+                if media_suffix and self.video.get('kind') in {'video','audio'}:suffix=media_suffix
                 self.filename=f'{base}_{self.id[:6]}{suffix}'
             if self.file.exists():
                 self.filename = self.file.stem + '_' + secrets.token_hex(3) + self.file.suffix

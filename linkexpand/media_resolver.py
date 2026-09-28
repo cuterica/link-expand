@@ -84,16 +84,16 @@ class MediaHTML(HTMLParser):
     def __init__(self,base):
         super().__init__(convert_charrefs=True)
         self.base=base;self.candidates=[];self.title=[];self.in_title=False;self.scripts=[];self.in_script=False;self.script=[]
-    def add(self,url,kind=None):
+    def add(self,url,kind=None,mime=''):
         if not url:return
         try:
             resolved=resource_url(urljoin(self.base,unescape(url)))
         except PreviewError:return
-        self.candidates.append({'url':resolved,'kind':kind or classify(resolved) or 'video'})
+        self.candidates.append({'url':resolved,'kind':kind or classify(resolved,mime) or 'video','mime':mime})
     def handle_starttag(self,tag,attrs):
         values=dict(attrs)
         if tag=='base' and values.get('href'):self.base=urljoin(self.base,values['href'])
-        if tag in {'video','audio','source'}:self.add(values.get('src') or values.get('data-src'),classify(values.get('src') or '',values.get('type') or '') or ('audio' if tag=='audio' else 'video'))
+        if tag in {'video','audio','source'}:self.add(values.get('src') or values.get('data-src'),classify(values.get('src') or '',values.get('type') or '') or ('audio' if tag=='audio' else 'video'),values.get('type') or '')
         if tag=='a' and values.get('href') and classify(values['href']):self.add(values['href'])
         if tag=='meta' and (values.get('property') or values.get('name')) in {'og:video','og:video:url','og:video:secure_url','twitter:player:stream'}:self.add(values.get('content'))
         if tag=='title':self.in_title=True
@@ -126,7 +126,7 @@ class MediaHTML(HTMLParser):
 def candidate_resource(candidate,index,source,headers,credential_origin):
     url=full_media_url(candidate['url'])
     kind=candidate.get('kind') or classify(url) or 'file'
-    filename=safe_filename(candidate.get('filename') or unquote(PurePosixPath(urlsplit(url).path).name) or 'download')
+    filename=safe_filename(candidate.get('filename') or filename_from_headers(url,{'content-type':candidate.get('mime','')}))
     if kind in {'hls','dash','pair'}:
         filename=str(PurePosixPath(filename).with_suffix('.mp4'))
     elif not PurePosixPath(filename).suffix:
