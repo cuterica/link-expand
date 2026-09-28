@@ -44,6 +44,28 @@ class App:
         self.records = OrderedDict()
         self._downloads = None
         self.catalogs = OrderedDict()
+        self.browser_preview_id = None
+
+    def browser_preview(self,data,source):
+        if not isinstance(data,dict):raise PreviewError('浏览器网页预览数据无效。')
+        url=normalize_url(str(data.get('url','')))
+        if url!=normalize_url(source):raise PreviewError('浏览器预览与当前页面地址不一致。')
+        title=clean_text(str(data.get('title','')),180)
+        if not title:raise PreviewError('浏览器没有提供页面标题。')
+        domain=urlsplit(url).hostname.removeprefix('www.')
+        from .metadata import concise_summary,fetch_resource,MAX_IMAGE
+        preview=Preview(url,title,concise_summary(str(data.get('description',''))),domain,
+                        clean_text(str(data.get('site_name','')),80) or domain,summary_source='浏览器网页摘要')
+        image=str(data.get('image_url',''))
+        if image:
+            try:
+                preview.image=fetch_resource(normalize_url(image),MAX_IMAGE,timeout=8,headers={'Referer':url,'User-Agent':'Mozilla/5.0'}).body
+                preview.visual_source='浏览器封面'
+            except PreviewError:preview.warnings.append('浏览器的标题和摘要已导入，封面暂时无法读取。')
+        visual=original_visual(preview);preview.image=visual;cover=thumbnail(preview);preview.image=None
+        result=self.put(preview,cover,visual)
+        with self.lock:self.browser_preview_id=result['id']
+        return result
 
     def catalog(self,result):
         key=secrets.token_hex(12)
@@ -51,6 +73,7 @@ class App:
             self.catalogs[key]=result
             while len(self.catalogs)>24:self.catalogs.popitem(last=False)
         return {'id':key,'source':result['source'],'title':result['title'],
+                'preview':result.get('preview'),
                 'resources':[{'index':item['index'],'kind':item.get('kind','video'),
                               'filename':item.get('filename',''),'qualities':[variant.get('quality','') for variant in item['variants']],
                               'url':item['variants'][0]['url']} for item in result['resources']]}
@@ -234,6 +257,13 @@ class Handler(BaseHTTPRequestHandler):
                                        'ffmpeg':bool(__import__('linkexpand.streaming',fromlist=['ffmpeg_path']).ffmpeg_path())})
         elif path == '/api/health':
             self.respond_json(200, {'app': 'link-expand', 'version': __version__})
+        elif path=='/api/capture/preview':
+            if not self.authenticated():return
+            try:
+                with app.lock:key=app.browser_preview_id
+                if not key:raise PreviewError('尚未导入浏览器网页预览。请在已登录的 Edge / Chrome 中点击扩展里的“导入当前网页预览”。')
+                self.respond_json(200,app.serialize(key,app.get_record(key)))
+            except PreviewError as error:self.respond_json(404,{'error':str(error)})
         elif path == '/api/video/jobs' or re.fullmatch(r'/api/video/jobs/[a-f0-9]{24}', path):
             if not self.authenticated():
                 return
@@ -331,7 +361,17 @@ class Handler(BaseHTTPRequestHandler):
                 from .media_resolver import imported_candidates
                 candidates=data.get('candidates')
                 if not isinstance(candidates,list):raise PreviewError('捕获数据格式无效。')
-                result=app.catalog(imported_candidates(str(data.get('source','')),candidates))
+                source=str(data.get('source',''));preview=None
+                if data.get('preview') is not None:
+                    if not app.fetch_slots.acquire(blocking=False):raise PreviewError('正在处理其他链接，请稍后重试。')
+                    try:preview=app.browser_preview(data['preview'],source)
+                    finally:app.fetch_slots.release()
+                if candidates:
+                    catalog=imported_candidates(source,candidates)
+                    if preview:catalog['preview']=preview
+                    result=app.catalog(catalog)
+                elif preview:result={'resources':[],'preview':preview}
+                else:raise PreviewError('请选择媒体资源，或导入当前网页预览。')
             elif path=='/api/download/start':
                 catalog=app.get_catalog(str(data.get('catalog_id','')))
                 item=next((resource for resource in catalog['resources'] if resource['index']==data.get('index')),None)
@@ -345,6 +385,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path=='/api/download/catalog':
                 key=str(data.get('id',''));catalog=app.get_catalog(key)
                 result={'id':key,'source':catalog['source'],'title':catalog['title'],
+                        'preview':catalog.get('preview'),
                         'resources':[{'index':item['index'],'kind':item.get('kind','video'),'filename':item.get('filename',''),
                                       'qualities':[variant.get('quality','') for variant in item['variants']]} for item in catalog['resources']]}
             elif path in {'/api/video/pause', '/api/video/resume', '/api/video/cancel', '/api/video/copy'}:

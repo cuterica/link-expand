@@ -100,7 +100,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
-    parser.add_argument('--expected-version',default='0.3.1')
+    parser.add_argument('--expected-version',default='0.3.2')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:
@@ -176,6 +176,14 @@ def main():
                         headers={'Content-Type':'application/json','X-Local-Token':token})
                     with urllib.request.urlopen(request, timeout=40) as response:
                         return json.load(response)
+                browser_url='https://www.bilibili.com/video/BV1cSec6tEux/'
+                captured=post('/api/capture/import',{'source':browser_url,'candidates':[],
+                    'preview':{'url':browser_url,'title':'已登录 Edge 页面导入测试','description':'元信息由浏览器提供','image_url':''}})
+                assert captured['preview']['title']=='已登录 Edge 页面导入测试'
+                request=urllib.request.Request(base+'/api/capture/preview',headers={'X-Local-Token':token})
+                with urllib.request.urlopen(request,timeout=10) as response:
+                    latest=json.load(response);assert latest['url']==browser_url
+                print('PASS: packaged browser preview import without refetching the blocked Bilibili page',flush=True)
                 x_preview = post('/api/preview', {'url':'https://x.com/TwitterDev/status/1460323737035677698'})
                 assert x_preview['videos']
                 job = post('/api/video/start', {'id':x_preview['id'],'video_index':x_preview['selected_video']})

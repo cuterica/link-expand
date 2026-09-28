@@ -6,21 +6,21 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.0)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.2)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.0-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.2-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.3.0`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.3.2`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.1)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。启动窗口提供打开界面、打开下载文件夹和退出功能；下载与卡片界面沿用 Windows 版。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.2)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。启动窗口提供打开界面、打开下载文件夹和退出功能；下载与卡片界面沿用 Windows 版。
 
-Mac 版本显示 `v0.3.1`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在启动窗口安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.3.2`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在启动窗口安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 
@@ -107,7 +107,7 @@ Windows ZIP 内含 `browser-extension` 文件夹，Release 也提供单独的扩
 
 X 仍优先走公开嵌入数据解析，不需要打开后台浏览器。实测样例：[X 官方开发者公开视频](https://x.com/TwitterDev/status/1460323737035677698)，完整 11.093 秒，1280×720，含 H.264 视频与 AAC 音频。专用接口可能调整，需要持续维护。
 
-B 站的 HTTP 412 表示本次访问被其安全风控拦截，删除分享链接的追踪参数不一定解决。当前没有可靠的 B 站网页访问适配，直接粘贴视频网页地址可能无法展开或识别下载；不要把这个错误当成视频不存在。若用户自己的 Chrome 能正常播放，可使用捕获扩展导入一个完整视频轨和一个音频轨，再选择合并下载；捕获不能替代网站要求的登录或验证。卡片预览被拦截时仍可手动编辑。
+B 站的 HTTP 412 表示本次访问被其安全风控拦截，删除分享链接的追踪参数不一定解决。直接粘贴 B 站视频网页地址可能无法展开或识别下载；v0.3.2 提供已登录浏览器导入：在正常打开此页的 Edge / Chrome 中，点击扩展“导入当前网页预览”，即可把此页标题、摘要与封面带到软件并自动显示卡片；不要把这个错误当成视频不存在。若用户自己的 Chrome 能正常播放，可使用捕获扩展导入一个完整视频轨和一个音频轨，再选择合并下载；捕获不能替代网站要求的登录或验证。软件自身不会自动共享 Edge / Chrome 登录状态；导入使用你主动选择的已打开网页。
 
 ## 本地运行
 
@@ -155,5 +155,5 @@ Mac 验证命令：
 ```bash
 python tests/macos_clipboard_smoke.py
 python tests/macos_app_smoke.py
-python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.1
+python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.2
 ```

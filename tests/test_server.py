@@ -122,6 +122,32 @@ class ServerTests(unittest.TestCase):
             self.assertEqual([value for key,value in response.getheaders() if key.lower()=='access-control-allow-origin'],[origin])
             self.assertIn('X-Local-Token',response.getheader('Access-Control-Allow-Headers'))
         finally:connection.close()
+    def test_logged_in_browser_preview_does_not_refetch_blocked_page(self):
+        origin={'Origin':'chrome-extension://'+'a'*32,'Sec-Fetch-Site':'cross-site'}
+        url='https://www.bilibili.com/video/BV1cSec6tEux/'
+        payload={'source':url,'candidates':[], 'preview':{'url':url,'title':'Edge 已登录页面','description':'浏览器提供的摘要','image_url':''}}
+        with patch('linkexpand.metadata.fetch_resource',side_effect=AssertionError('Blocked page must not be fetched again')):
+            status,body,_=self.request('/api/capture/import',payload,origin)
+        self.assertEqual(status,200)
+        preview=json.loads(body)['preview'];self.assertEqual(preview['title'],'Edge 已登录页面')
+        self.assertEqual(preview['summary_source'],'浏览器网页摘要')
+        status,body,_=self.request('/api/capture/preview');self.assertEqual(status,200)
+        self.assertEqual(json.loads(body)['url'],url)
+        self.assertEqual(self.request('/api/capture/preview',headers={'X-Local-Token':''})[0],403)
+        self.assertEqual(self.request('/api/capture/import',payload,dict(origin,**{'X-Local-Token':''}))[0],403)
+    def test_browser_preview_cover_uses_public_image_with_page_referer(self):
+        from io import BytesIO
+        from PIL import Image
+        from linkexpand.metadata import Resource
+        out=BytesIO();Image.new('RGB',(960,480),'green').save(out,'PNG')
+        url='https://www.bilibili.com/video/BV1cSec6tEux/'
+        image='https://i0.hdslb.com/bfs/archive/cover.jpg'
+        payload={'source':url,'candidates':[],'preview':{'url':url,'title':'视频标题','image_url':image}}
+        with patch('linkexpand.metadata.fetch_resource',return_value=Resource(image,out.getvalue(),'image/png')) as fetch:
+            status,body,_=self.request('/api/capture/import',payload)
+        self.assertEqual(status,200);self.assertIsNotNone(json.loads(body)['preview']['cover'])
+        self.assertEqual(fetch.call_args.args[0],image)
+        self.assertEqual(fetch.call_args.kwargs['headers']['Referer'],url)
     def test_generic_file_download_preserves_unicode_filename(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'中文文件.zip';path.write_bytes(b'PK-test')

@@ -204,6 +204,8 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
     setBusy(busy);
     $('video-download').disabled = !(downloadCatalog?.resources?.length || current?.videos?.length);
     restoreVideoJob();
+    if(location.hash==='#browser-preview')$('capture-preview').click();
+    else if(location.hash==='#browser-capture')$('capture-load').click();
   })
   .catch(error => { clipboardReady = false; $('copy-text').disabled = true; $('video-download').disabled = true; feedback(error.message, true); });
 
@@ -358,14 +360,33 @@ $('download-resolve').addEventListener('click',()=>resolveDownload(false));
 $('download-scan').addEventListener('click',()=>resolveDownload(true));
 $('download-url').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();resolveDownload(false);}});
 $('capture-pair').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(token);toast('配对码已复制，粘贴到浏览器捕获扩展；程序重启后需重新配对。');}catch(error){videoError(error.message);}});
+async function importPreview(preview) {
+  clearTimeout(expandTimer);requestController?.abort();const job=++revision;
+  $('url-input').value=preview.url;lastRequested=preview.url;setBusy(true);
+  await display(preview,job);
+}
+$('capture-preview').addEventListener('click',async()=>{
+  try {
+    const response=await fetch('/api/capture/preview',{headers:{'X-Local-Token':token}});
+    const preview=await response.json();if(!response.ok)throw new Error(preview.error);
+    await importPreview(preview);
+  }catch(error){feedback(error.message,true);}
+});
 $('capture-load').addEventListener('click',async()=>{
   try {
     const response=await fetch('/api/download/catalogs',{headers:{'X-Local-Token':token}});
     const catalogs=await response.json();if(!response.ok)throw new Error(catalogs.error);
     if(!catalogs.length)throw new Error('尚未导入浏览器捕获资源。');
     const last=catalogs[catalogs.length-1];
-    displayCatalog(await api('/api/download/catalog',{id:last.id}));
+    const catalog=await api('/api/download/catalog',{id:last.id});
+    if(catalog.preview)await importPreview(catalog.preview);
+    displayCatalog(catalog);
   }catch(error){videoError(error.message);}
+});
+window.addEventListener('hashchange',()=>{
+  if(!clipboardReady)return;
+  if(location.hash==='#browser-preview')$('capture-preview').click();
+  else if(location.hash==='#browser-capture')$('capture-load').click();
 });
 async function refreshQueue() {
   try {
