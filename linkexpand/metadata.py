@@ -104,8 +104,9 @@ class PinnedHTTPSConnection(PinnedHTTPConnection):
     def connect(self):
         super().connect()
         try:
-            context=ssl.create_default_context()
-            if sys.platform=='darwin':
+            context=getattr(self,'ssl_context',None)
+            if context is None:context=ssl.create_default_context()
+            if sys.platform=='darwin' and getattr(self,'ssl_context',None) is None:
                 import certifi
                 context.load_verify_locations(cafile=certifi.where())
             self.sock = context.wrap_socket(

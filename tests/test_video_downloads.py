@@ -165,6 +165,16 @@ class DownloadTests(unittest.TestCase):
             self.assertIsNone(state['max_bytes'])
             self.assertEqual(job.file.read_bytes(), VIDEO)
 
+    def test_automatic_connections_preserve_full_file_and_saved_mode(self):
+        video=self.video();video['options']={'connections':0,'max_bytes':None}
+        job=self.start(video);state=self.wait(job)
+        self.assertEqual(state['status'],'complete',state)
+        self.assertEqual(state['connection_mode'],'auto')
+        self.assertEqual(job.file.read_bytes(),VIDEO)
+        self.assertGreater(state['transport']['requests'],0)
+        self.manager.close();self.manager=DownloadManager(self.root,self.root/'state')
+        self.assertTrue(self.manager.get(job.id).automatic)
+
     def test_unlimited_prioritizes_largest_frame_over_bitrate(self):
         video = self.video(variants=[
             {'url':'http://video.twimg.com/low.mp4', 'quality':'1280×720', 'bitrate':9000000},

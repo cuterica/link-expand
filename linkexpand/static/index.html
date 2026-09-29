@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="local-token" content="__LOCAL_TOKEN__">
-  <meta name="app-version" content="0.3.61">
+  <meta name="app-version" content="0.3.62">
   <meta name="theme-color" content="#237b5b">
   <title>Link Expand · 链接预览</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -25,7 +25,7 @@
   </svg>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Link Expand 首页"><span class="brand-icon"><svg><use href="#i-link"/></svg></span><span>Link Expand<span class="brand-dot">.</span></span></a>
-    <div class="header-right"><span class="local-pill"><span class="status-dot"></span>本地运行</span><span class="version" id="app-version">v0.3.61</span><button id="native-quit" class="text-button" type="button" hidden>退出软件</button></div>
+    <div class="header-right"><span class="local-pill"><span class="status-dot"></span>本地运行</span><span class="version" id="app-version">v0.3.62</span><button id="native-quit" class="text-button" type="button" hidden>退出软件</button></div>
   </header>
   <main>
     <div class="intro"><div class="eyebrow">A LITTLE LINK. A BIGGER PICTURE.</div><h1>让链接，多一点内容。</h1><p>放入网址，自动展开摘要与画面。值得打开的内容，先看一眼。</p></div>
@@ -67,7 +67,7 @@
           <label for="download-url" class="field-label">文件、视频、播放清单或网页地址</label>
           <input id="download-url" type="text" placeholder="https://… 文件 / MP4 / M3U8 / MPD / 网页" maxlength="16384">
           <div class="resolve-buttons"><button id="download-resolve" class="button secondary">识别下载资源</button><button id="download-scan" class="button secondary">动态网页识别</button></div>
-          <details class="download-advanced"><summary>下载设置、请求头与浏览器捕获</summary><label for="download-connections" class="field-label">并行连接数</label><select id="download-connections"><option value="1">1</option><option value="4" selected>4</option><option value="8">8</option><option value="16">16</option></select><label for="download-speed" class="field-label">限速 KB/s（0 为不限速）</label><input id="download-speed" type="number" min="0" max="100000" value="0"><label for="download-headers" class="field-label">请求头 JSON（选填，Cookie / Authorization 只留在本次会话）</label><textarea id="download-headers" rows="3" placeholder='{"Referer":"https://example.com/"}'></textarea><div class="capture-buttons"><button id="capture-pair" class="text-button">复制扩展配对码</button><button id="capture-load" class="text-button">读取浏览器捕获</button></div><p class="hint">复杂播放器可通过附带的 Chrome / Edge 扩展捕获已播放的媒体请求，再导入这里。</p></details>
+          <details class="download-advanced"><summary>下载设置、请求头与浏览器捕获</summary><label for="download-connections" class="field-label">并行连接数</label><select id="download-connections"><option value="0" selected>自动（按实际网速调整）</option><option value="1">1</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select><label for="download-speed" class="field-label">限速 KB/s（0 为不限速）</label><input id="download-speed" type="number" min="0" max="100000" value="0"><label for="download-headers" class="field-label">请求头 JSON（选填，Cookie / Authorization 只留在本次会话）</label><textarea id="download-headers" rows="3" placeholder='{"Referer":"https://example.com/"}'></textarea><div class="capture-buttons"><button id="capture-pair" class="text-button">复制扩展配对码</button><button id="capture-load" class="text-button">读取浏览器捕获</button></div><p class="hint">复杂播放器可通过附带的 Chrome / Edge 扩展捕获已播放的媒体请求，再导入这里。</p></details>
           <p id="video-hint" class="hint">支持普通文件、MP4 / WebM / 音频直链及点播 HLS / DASH，沿用多连接、暂停续传与重试。</p>
           <p id="merge-component" class="hint"></p>
           <label for="video-choice" class="field-label">选择下载资源</label>

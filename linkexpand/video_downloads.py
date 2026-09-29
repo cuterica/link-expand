@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_EXCEPTION
+from collections import deque
 from contextlib import contextmanager
 import hashlib
 import http.client
@@ -14,6 +15,9 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import socket
+import ssl
+import sys
 import threading
 import time
 from urllib.parse import urljoin, urlsplit
@@ -22,6 +26,7 @@ from .metadata import (PinnedHTTPConnection, PinnedHTTPSConnection, PreviewError
                        normalize_url, public_addresses, http_error_message)
 from .download_http import resource_url, checked_headers, scoped_headers, public_headers
 from .quality import quality_rank
+from .download_tuning import DownloadTuner, TransferMeter
 
 MAX_VIDEO_BYTES = 500_000_000
 
@@ -35,27 +40,141 @@ class RangeUnsupported(PreviewError):
 
 
 class RetryableHTTP(PreviewError):
-    pass
+    def __init__(self, message, status=None, retry_after=0):
+        super().__init__(message)
+        self.status = status
+        self.retry_after=retry_after
+
+
+class DownloadTransport:
+    """Per-task validated DNS, verified TLS and complete-response connection reuse."""
+    def __init__(self, on_error=None):
+        self.lock = threading.RLock()
+        self.dns = {}
+        self.idle = {}
+        self.active = set()
+        self.endpoints = {}
+        self.cursor = {}
+        self.ssl_context = None
+        self.on_error = on_error
+        self.statistics = dict(requests=0, new_connections=0, reused_connections=0, dns_resolutions=0)
+
+    def acquire(self, scheme, host, port):
+        origin = scheme, host, port
+        now = time.monotonic()
+        with self.lock:
+            cached = self.dns.get(origin)
+            if not cached or now - cached[0] >= 60:
+                if len(self.dns)>=128:
+                    oldest=min(self.dns,key=lambda value:self.dns[value][0]);self.dns.pop(oldest)
+                    for old_key in [value for value in self.idle if value[:3]==oldest]:
+                        for _,old_connection in self.idle.pop(old_key):old_connection.close()
+                        self.endpoints.pop(old_key,None)
+                addresses = public_addresses(host, port)
+                self.dns[origin] = now, addresses
+                self.statistics['dns_resolutions'] += 1
+            else:
+                addresses = cached[1]
+            reusable = []
+            for address in addresses:
+                key = origin + (address,)
+                idle = self.idle.get(key, [])
+                while idle and now - idle[-1][0] > 20:
+                    idle.pop()[1].close()
+                if idle and self.endpoints.get(key,{}).get('retry_after',0)<=now:
+                    reusable.append(key)
+            if reusable:
+                key = max(reusable, key=lambda value: self.endpoints.get(value, {}).get('rate', 0))
+                connection = self.idle[key].pop()[1]
+                self.statistics['reused_connections'] += 1
+            else:
+                available = [address for address in addresses if self.endpoints.get(origin+(address,), {}).get('retry_after', 0) <= now] or addresses
+                ranked = sorted(available, key=lambda address: self.endpoints.get(origin+(address,), {}).get('rate', 0), reverse=True)
+                untested = [address for address in ranked if origin+(address,) not in self.endpoints]
+                choices = untested or ranked[:max(1, min(2, len(ranked)))]
+                cursor = self.cursor.get(origin, 0)
+                address = choices[cursor % len(choices)]
+                self.cursor[origin] = cursor + 1
+                key = origin + (address,)
+                factory = PinnedHTTPSConnection if scheme == 'https' else PinnedHTTPConnection
+                connection = factory(host, port, address, 6)
+                if scheme == 'https':
+                    if self.ssl_context is None:
+                        self.ssl_context = ssl.create_default_context()
+                        if sys.platform == 'darwin':
+                            import certifi
+                            self.ssl_context.load_verify_locations(cafile=certifi.where())
+                    connection.ssl_context = self.ssl_context
+                self.statistics['new_connections'] += 1
+            self.statistics['requests'] += 1
+            self.active.add(connection)
+            return connection, key
+
+    def release(self, connection, key, response, elapsed, failed=False):
+        received = getattr(response, '_download_bytes', 0) if response else 0
+        complete = bool(response and response.isclosed() and not response.will_close and connection.sock)
+        with self.lock:
+            self.active.discard(connection)
+            record = self.endpoints.setdefault(key, {})
+            if failed:
+                record['rate'] = 0
+                record['retry_after'] = time.monotonic() + 10
+                if self.on_error:self.on_error()
+            elif received >= 65536 and elapsed > 0:
+                rate = received / elapsed
+                record['rate'] = record.get('rate', rate) * .5 + rate * .5
+                record['retry_after'] = 0
+            if complete and not failed:
+                idle = self.idle.setdefault(key, [])
+                if len(idle) < 16 and sum(map(len,self.idle.values()))<32:idle.append((time.monotonic(), connection))
+                else:connection.close()
+            else:connection.close()
+        if response:response.close()
+
+    def interrupt(self):
+        with self.lock:
+            active = list(self.active)
+        for connection in active:
+            try:
+                if connection.sock:connection.sock.shutdown(socket.SHUT_RDWR)
+            except OSError:pass
+
+    def close(self):
+        with self.lock:
+            connections = list(self.active) + [connection for values in self.idle.values() for _,connection in values]
+            self.idle.clear()
+            self.active.clear()
+        for connection in connections:connection.close()
 
 
 @contextmanager
-def open_video(url, headers=None, request_headers=None, credential_origin=None,allow_compressed=False):
+def open_video(url, headers=None, request_headers=None, credential_origin=None,allow_compressed=False,transport=None):
     current = resource_url(url)
     request_headers = checked_headers(request_headers)
     credential_origin = credential_origin or current
     for _ in range(6):
         parts = urlsplit(current)
         port = parts.port or (443 if parts.scheme == 'https' else 80)
-        address = public_addresses(parts.hostname, port)[0]
-        factory = PinnedHTTPSConnection if parts.scheme == 'https' else PinnedHTTPConnection
-        connection = factory(parts.hostname, port, address, 6)
-        response=None
+        key = None
+        if transport:connection,key = transport.acquire(parts.scheme,parts.hostname,port)
+        else:
+            address = public_addresses(parts.hostname, port)[0]
+            factory = PinnedHTTPSConnection if parts.scheme == 'https' else PinnedHTTPConnection
+            connection = factory(parts.hostname, port, address, 6)
+        response=None;failed=False;request_started=time.monotonic()
         try:
             connection.request('GET', parts.path + ('?' + parts.query if parts.query else ''), headers={
                 'User-Agent': 'Mozilla/5.0', 'Accept-Encoding': 'identity',
                 **scoped_headers(request_headers, current, credential_origin),
                 **(headers or {})})
             response = connection.getresponse()
+            if transport:
+                response._download_bytes=0
+                for name in ['read','read1']:
+                    original=getattr(response,name)
+                    def tracked(*args,_read=original,**kwargs):
+                        result=_read(*args,**kwargs);response._download_bytes+=len(result);return result
+                    setattr(response,name,tracked)
             if response.status in {301, 302, 303, 307, 308}:
                 location = response.getheader('Location')
                 if not location:
@@ -63,7 +182,8 @@ def open_video(url, headers=None, request_headers=None, credential_origin=None,a
                 current = resource_url(urljoin(current, location))
                 continue
             if response.status in {429, 500, 502, 503, 504}:
-                raise RetryableHTTP('视频服务器暂时繁忙，请重试。')
+                delay=response.getheader('Retry-After','')
+                raise RetryableHTTP('视频服务器暂时繁忙，请重试。',response.status,min(60,int(delay)) if delay.isdigit() else 1)
             if response.status not in {200, 206}:
                 if response.status==412:raise PreviewError(http_error_message(current,response.status))
                 raise PreviewError(f'资源服务器返回 HTTP {response.status}，请检查地址或请求头后重试。')
@@ -72,14 +192,19 @@ def open_video(url, headers=None, request_headers=None, credential_origin=None,a
             response.resource_url = current
             yield response
             return
+        except (OSError,http.client.HTTPException,RetryableHTTP):
+            failed=True
+            raise
         finally:
-            if response is not None:response.close()
-            connection.close()
+            if transport:transport.release(connection,key,response,time.monotonic()-request_started,failed)
+            else:
+                if response is not None:response.close()
+                connection.close()
     raise PreviewError('视频服务器跳转次数过多。')
 
 
-def probe_video(url, request_headers=None, credential_origin=None):
-    with open_video(url, {'Range': 'bytes=0-0'}, request_headers, credential_origin) as response:
+def probe_video(url, request_headers=None, credential_origin=None,transport=None):
+    with open_video(url, {'Range': 'bytes=0-0'}, request_headers, credential_origin,transport=transport) as response:
         content_range = re.fullmatch(r'bytes 0-0/(\d+)', response.getheader('Content-Range', ''))
         if response.status == 206 and not content_range:
             raise PreviewError('视频服务器返回了错误的分段信息。')
@@ -129,10 +254,17 @@ class DownloadJob:
         self.stream_state = {}
         self.selected_variant = None
         self.credentials_missing = False
+        self.transport = None
+        self.transport_statistics = {}
+        self.meter = TransferMeter()
+        self.active_connections = 0
         options=video.get('options') or {}
         self.limit = saved.get('max_bytes', options.get('max_bytes', manager.limit)) if saved else options.get('max_bytes', manager.limit)
-        self.workers=min(16,max(1,int(options.get('connections',manager.workers))))
+        connections=int(options.get('connections',manager.workers))
+        self.automatic=connections==0
+        self.workers=16 if self.automatic else min(16,max(1,connections))
         self.speed_limit=max(0,int(options.get('speed_limit',0)))
+        self.tuner=DownloadTuner(self.workers,self.automatic,self.speed_limit)
         self.rate_lock=threading.Lock();self.next_transfer=0.
         if saved:
             for name in ['asset', 'positions', 'plan', 'downloaded', 'filename', 'quality', 'sha256', 'stream_state', 'credentials_missing']:
@@ -169,7 +301,7 @@ class DownloadJob:
             completed = sum(self.current) if self.plan else self.downloaded
             total = self.asset.get('size') if self.asset else None
             elapsed = time.monotonic() - self.started if self.started else 0
-            speed = max(0, completed - self.initial_bytes) / elapsed if elapsed > 0 and self.status == 'downloading' else 0
+            speed = self.meter.speed() if self.status == 'downloading' else 0
             return {'id': self.id, 'source': self.source, 'video_index': self.video['index'],
                     'status': self.status, 'downloaded': completed, 'total': total,
                     'progress': min(1, completed / total) if total else None, 'speed': int(speed),
@@ -178,7 +310,13 @@ class DownloadJob:
                     'resumable': bool(self.asset and self.asset['range'] and self.asset['validator']),
                     'sha256': self.sha256, 'kind': self.video.get('kind','video'),
                     'fragments': len(self.stream_state.get('completed',{})),
-                    'credentials_missing': self.credentials_missing, 'max_bytes': self.limit}
+                    'credentials_missing': self.credentials_missing, 'max_bytes': self.limit,
+                    'connection_mode':'auto' if self.automatic else 'manual',
+                    'connections':self.active_connections,'target_connections':self.tuner.connections,
+                    'max_connections':self.workers,
+                    'speed_limit':self.speed_limit,
+                    'range_bytes':self.tuner.range_bytes,
+                    'transport':dict(self.transport.statistics if self.transport else self.transport_statistics)}
 
     def save(self):
         with self.lock:
@@ -231,6 +369,7 @@ class DownloadJob:
                 return
             self.stop_reason = 'cancel' if cancel else 'pause'
             self.stop.set()
+            if self.transport:self.transport.interrupt()
             if self.thread and self.thread.is_alive():
                 self.status = 'cancelling' if cancel else 'pausing'
             else:
@@ -249,7 +388,7 @@ class DownloadJob:
         for variant in sorted(self.video['variants'], key=quality_rank, reverse=True):
             self.check_stop()
             try:
-                candidate = probe_video(variant['url'],self.request_headers(variant),self.video.get('credential_origin') or self.source)
+                candidate = probe_video(variant['url'],self.request_headers(variant),self.video.get('credential_origin') or self.source,transport=self.transport)
             except (OSError, http.client.HTTPException, PreviewError) as error:
                 last_error = error
                 continue
@@ -310,6 +449,9 @@ class DownloadJob:
                 self.check_stop()
             acquired = True
             self.check_stop()
+            self.meter=TransferMeter()
+            self.tuner=DownloadTuner(self.workers,self.automatic,self.speed_limit)
+            self.transport=DownloadTransport(on_error=self.tuner.backoff)
             self.status = 'resolving'
             if self.video.get('kind') in {'hls','dash','pair'}:
                 self.run_stream()
@@ -394,6 +536,11 @@ class DownloadJob:
             except PreviewError:
                 pass
         finally:
+            if self.transport:
+                self.transport_statistics=dict(self.transport.statistics)
+                self.transport.close()
+                self.transport=None
+            self.active_connections=0
             if acquired:
                 self.manager.slots.release()
 
@@ -407,43 +554,91 @@ class DownloadJob:
             with self.part.open('wb') as partial:
                 partial.truncate(total)
             self.save()
-        abort = threading.Event()
-        with ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix='LinkExpand-range') as pool:
-            futures = [pool.submit(self.segment, index, abort) for index in range(len(self.plan))]
+        abort=threading.Event()
+        pending=[index for index,(start,end) in enumerate(self.plan) if self.positions[index]<end-start+1]
+        self.parallel_work(pending,lambda index,worker:self.segment(index,abort,worker),abort,checkpoint=True)
+
+    def checkpoint(self):
+        with self.lock:
+            saved=list(self.current)
+            if saved==self.positions:return
+        with self.part.open('r+b',buffering=0) as partial:os.fsync(partial.fileno())
+        with self.lock:
+            self.positions=[max(old,new) for old,new in zip(self.positions,saved)]
+            self.save()
+
+    def parallel_work(self, items, operation, abort, checkpoint=False):
+        pending=deque(items)
+        condition=threading.Condition()
+        running=0
+        def worker(number):
+            nonlocal running
+            while True:
+                with condition:
+                    while True:
+                        self.check_stop()
+                        if abort.is_set():return
+                        if not pending and not running:return
+                        if pending and number<self.tuner.connections:
+                            item=pending.popleft();running+=1;self.active_connections=running;break
+                        condition.wait(.2)
+                complete=True
+                try:
+                    complete=operation(item,number) is not False
+                except BaseException:
+                    abort.set()
+                    raise
+                finally:
+                    with condition:
+                        running-=1;self.active_connections=running
+                        if not complete and not abort.is_set():pending.appendleft(item)
+                        condition.notify_all()
+        with ThreadPoolExecutor(max_workers=self.workers,thread_name_prefix='LinkExpand-transfer') as pool:
+            futures={pool.submit(worker,number) for number in range(self.workers)}
+            last_checkpoint=time.monotonic()
             try:
-                for future in as_completed(futures):
-                    future.result()
+                while futures:
+                    done,futures=wait(futures,timeout=.5,return_when=FIRST_EXCEPTION)
+                    for future in done:future.result()
+                    self.check_stop()
+                    now=time.monotonic();self.tuner.tick(self.meter.total,now)
+                    with condition:condition.notify_all()
+                    if checkpoint and now-last_checkpoint>=3:
+                        self.checkpoint();last_checkpoint=now
             except BaseException:
                 abort.set()
-                for future in futures:
-                    future.cancel()
+                if self.transport:self.transport.interrupt()
+                with condition:condition.notify_all()
                 raise
 
-    def segment(self, index, abort):
+    def segment(self, index, abort, worker=0):
         start, end = self.plan[index]
         position = self.positions[index]
-        for attempt in range(3):
+        attempt=0
+        while position<end-start+1:
             self.check_stop()
-            if abort.is_set() or position == end - start + 1:
-                return
+            if abort.is_set():return True
+            if worker>=self.tuner.connections:return False
             offset = start + position
-            headers = {'Range': f'bytes={offset}-{end}'}
+            request_end=min(end,offset+self.tuner.range_bytes-1)
+            headers = {'Range': f'bytes={offset}-{request_end}'}
             if self.asset['validator']:
                 headers['If-Range'] = self.asset['validator']
             try:
-                with self.part.open('r+b', buffering=0) as partial, open_video(self.asset['url'], headers,self.request_headers(),self.video.get('credential_origin') or self.source) as response:
+                with self.part.open('r+b', buffering=0) as partial, open_video(self.asset['url'], headers,self.request_headers(),self.video.get('credential_origin') or self.source,transport=self.transport) as response:
                     if response.status == 200:
                         raise RangeUnsupported('视频服务器不支持这次分段请求，改为单连接下载。')
-                    expected = f'bytes {offset}-{end}/{self.asset["size"]}'
+                    expected = f'bytes {offset}-{request_end}/{self.asset["size"]}'
                     if response.getheader('Content-Range', '') != expected:
                         raise PreviewError('视频内容已改变或分段响应错误，请重新下载。')
                     partial.seek(offset)
                     try:
-                        while position <= end - start:
+                        while position <= request_end - start:
                             self.check_stop()
                             if abort.is_set():
-                                return
-                            chunk = response.read1(min(65536, end - start + 1 - position))
+                                return True
+                            if worker>=self.tuner.connections:return False
+                            chunk = response.read1(min(256*1024, request_end - start + 1 - position))
                             if not chunk:
                                 raise OSError('Incomplete range')
                             self.throttle(len(chunk))
@@ -451,6 +646,7 @@ class DownloadJob:
                             if written != len(chunk):
                                 raise OSError('Incomplete disk write')
                             position += len(chunk)
+                            self.meter.add(len(chunk))
                             with self.lock:
                                 self.current[index] = position
                     finally:
@@ -460,20 +656,24 @@ class DownloadJob:
                             self.positions[index] = position
                             self.current[index] = position
                         self.save()
-                return
+                attempt=0
             except (OSError, http.client.HTTPException, RetryableHTTP) as error:
+                self.check_stop()
                 if isinstance(error, OSError) and error.errno in {errno.ENOSPC, errno.EACCES, errno.EROFS, getattr(errno, 'EDQUOT', -1)}:
                     raise PreviewError('磁盘写入失败，请检查剩余空间和权限。') from None
                 if attempt == 2:
                     raise PreviewError('网络中断，已保存下载进度，可点击继续下载。') from None
-                self.stop.wait(.3 * (attempt + 1))
+                self.stop.wait(max(.3*(attempt+1),getattr(error,'retry_after',0)))
+                attempt+=1
+        return True
 
     def sequential(self):
         self.downloaded = 0
         for attempt in range(3):
             self.check_stop()
             try:
-                with open_video(self.asset['url'],request_headers=self.request_headers(),credential_origin=self.video.get('credential_origin') or self.source) as response, self.part.open('wb') as partial:
+                self.active_connections=1
+                with open_video(self.asset['url'],request_headers=self.request_headers(),credential_origin=self.video.get('credential_origin') or self.source,transport=self.transport) as response, self.part.open('wb') as partial:
                     length = response.getheader('Content-Length', '')
                     if length.isdigit() and self.exceeds_limit(int(length)):
                         raise PreviewError('视频超过 500 MB，已停止下载。')
@@ -488,19 +688,21 @@ class DownloadJob:
                         self.throttle(len(chunk))
                         partial.write(chunk)
                         self.downloaded += len(chunk)
+                        self.meter.add(len(chunk))
                     partial.flush()
                     os.fsync(partial.fileno())
                 return
             except (OSError, http.client.HTTPException, RetryableHTTP) as error:
+                self.check_stop()
                 if isinstance(error, OSError) and error.errno in {errno.ENOSPC, errno.EACCES, errno.EROFS, getattr(errno, 'EDQUOT', -1)}:
                     raise PreviewError('磁盘写入失败，请检查剩余空间和权限。') from None
                 if attempt == 2:
                     raise PreviewError('网络中断，服务器不支持续传，请重试。') from None
-                self.stop.wait(.3 * (attempt + 1))
+                self.stop.wait(max(.3*(attempt+1),getattr(error,'retry_after',0)))
 
 
 class DownloadManager:
-    def __init__(self, root=None, storage=None, limit=MAX_VIDEO_BYTES, workers=4, chunk_size=4*1024*1024):
+    def __init__(self, root=None, storage=None, limit=MAX_VIDEO_BYTES, workers=4, chunk_size=64*1024*1024):
         self.root = Path(root) if root else downloads_directory()
         self.storage = Path(storage) if storage else self.root / '.linkexpand-tasks'
         self.limit, self.workers, self.chunk_size = limit, workers, chunk_size
@@ -577,7 +779,9 @@ class DownloadManager:
                         job.credentials_missing=False
                         options=video.get('options') or {}
                         job.limit=options.get('max_bytes',self.limit)
-                        job.workers=min(16,max(1,int(options.get('connections',self.workers))))
+                        connections=int(options.get('connections',self.workers))
+                        job.automatic=connections==0
+                        job.workers=16 if job.automatic else min(16,max(1,connections))
                         job.speed_limit=max(0,int(options.get('speed_limit',0)))
                     job.launch()
                     return job.snapshot()

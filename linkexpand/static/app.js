@@ -291,6 +291,8 @@ function downloadMaxBytes() {
 function updateDownloadLimit() {
   $('download-limit-badge').textContent = downloadMaxBytes() === null ? '无限制 · 最高画质' : '≤ 500 MB';
 }
+try { const connections=localStorage.getItem('linkexpand-download-connections');if(['0','1','4','8','16'].includes(connections))$('download-connections').value=connections; } catch (_) {}
+$('download-connections').addEventListener('change',()=>{try {localStorage.setItem('linkexpand-download-connections',$('download-connections').value);}catch(_) {}});
 try { if (localStorage.getItem('linkexpand-download-limit') === 'unlimited') $('download-max-bytes').value = 'unlimited'; } catch (_) {}
 updateDownloadLimit();
 $('download-max-bytes').addEventListener('change', () => {
@@ -308,6 +310,11 @@ function sizeText(bytes) {
 }
 
 function displayVideoJob(job) {
+  if (videoJobId !== job.id && job.connection_mode) {
+    $('download-connections').value=job.connection_mode==='auto'?'0':String(job.max_connections);
+    if(Object.hasOwn(job,'speed_limit'))$('download-speed').value=String(job.speed_limit/1000);
+    try {localStorage.setItem('linkexpand-download-connections',$('download-connections').value);}catch(_){}
+  }
   if (videoJobId !== job.id && Object.hasOwn(job, 'max_bytes')) {
     $('download-max-bytes').value = job.max_bytes === null ? 'unlimited' : '500000000';
     updateDownloadLimit();
@@ -325,7 +332,7 @@ function displayVideoJob(job) {
   if (job.progress == null) $('video-progress').removeAttribute('value');
   else $('video-progress').value = job.progress;
   $('video-detail').textContent = [job.quality, `${sizeText(job.downloaded)} / ${job.total ? sizeText(job.total) : '大小未知'}`,
-    job.speed ? `${sizeText(job.speed)}/秒` : '',job.fragments ? `${job.fragments} 个分段已保存` : '', job.max_bytes === null ? '无限制' : '500 MB 上限'].filter(Boolean).join(' · ');
+    job.speed ? `${sizeText(job.speed)}/秒` : '',job.fragments ? `${job.fragments} 个分段已保存` : '', job.max_bytes === null ? '无限制' : '500 MB 上限', job.connection_mode === 'auto' ? `自动加速 · ${job.connections || job.target_connections || 1} 个连接` : `${job.connections || '—'} 个连接`].filter(Boolean).join(' · ');
   $('video-pause').hidden = !['queued', 'resolving', 'downloading'].includes(job.status);
   $('video-resume').hidden = !['paused', 'error'].includes(job.status);
   $('video-resume').textContent = job.resumable || job.fragments ? '继续下载' : '重新下载';
@@ -389,7 +396,7 @@ for (const action of ['pause', 'resume', 'cancel']) {
     if (!videoJobId) return;
     const button = $('video-' + action);
     button.disabled = true;
-    try { displayVideoJob(await api('/api/video/' + action, {job_id: videoJobId, ...(action === 'resume' ? {max_bytes:downloadMaxBytes()} : {})})); }
+    try { displayVideoJob(await api('/api/video/' + action, {job_id: videoJobId, ...(action === 'resume' ? {max_bytes:downloadMaxBytes(),connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000} : {})})); }
     catch (error) { videoError(error.message); }
     finally { button.disabled = false; }
   });

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor,as_completed
 import hashlib
 import http.client
 import json
@@ -342,7 +341,7 @@ def stream_download(job,variant):
             with job.lock:live[name]=0
             try:
                 digest=hashlib.sha256();size=0
-                with open_video(item['url'],extra,item.get('request_headers',headers),item.get('credential_origin',scope)) as response,temporary.open('wb') as output:
+                with open_video(item['url'],extra,item.get('request_headers',headers),item.get('credential_origin',scope),transport=job.transport) as response,temporary.open('wb') as output:
                     if item.get('range'):
                         expected=f'bytes {item["range"][0]}-{item["range"][1]}/'
                         if response.status!=206 or not response.getheader('Content-Range','').startswith(expected):raise PreviewError('流媒体字节范围响应不匹配。')
@@ -354,7 +353,7 @@ def stream_download(job,variant):
                             total=sum(record['size'] for record in completed.values())+sum(live.values())+len(chunk)
                             if job.exceeds_limit(total):raise PreviewError('分段资源合计超过 500 MB，已停止下载。')
                             live[name]+=len(chunk);job.downloaded=total
-                        output.write(chunk);digest.update(chunk);size+=len(chunk)
+                        output.write(chunk);digest.update(chunk);size+=len(chunk);job.meter.add(len(chunk))
                     output.flush();os.fsync(output.fileno())
                 if item.get('range') and size!=item['range'][1]-item['range'][0]+1:raise OSError('Incomplete segment range')
                 if item.get('is_key') and size!=16:raise PreviewError('HLS AES-128 密钥长度无效。')
@@ -362,21 +361,15 @@ def stream_download(job,variant):
                 with job.lock:
                     live.pop(name,None);completed[name]={'size':size,'sha256':digest.hexdigest()};job.downloaded=sum(value['size'] for value in completed.values())+sum(live.values());job.save()
                 return
-            except (OSError,http.client.HTTPException,RetryableHTTP):
+            except (OSError,http.client.HTTPException,RetryableHTTP) as error:
+                job.check_stop()
                 temporary.unlink(missing_ok=True)
                 if attempt==2:raise PreviewError('流媒体分段下载中断，可继续下载已完成的分段。') from None
-                job.stop.wait(.3*(attempt+1))
+                job.stop.wait(max(.3*(attempt+1),getattr(error,'retry_after',0)))
             finally:
                 temporary.unlink(missing_ok=True)
                 with job.lock:live.pop(name,None)
-    with ThreadPoolExecutor(max_workers=job.workers,thread_name_prefix='LinkExpand-stream') as pool:
-        futures=[pool.submit(fetch,name,item) for name,item in resources.items()]
-        try:
-            for future in as_completed(futures):future.result()
-        except BaseException:
-            abort.set()
-            for future in futures:future.cancel()
-            raise
+    job.parallel_work(list(resources),lambda name,worker:fetch(name,resources[name]),abort)
     job.check_stop();job.status='merging';job.save()
     inputs=[]
     for index,track in enumerate(plan['tracks']):

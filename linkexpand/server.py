@@ -493,8 +493,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not video:
                     raise PreviewError('请先展开含视频的 X / 推特链接，再选择视频。')
                 video=dict(video)
-                connections=data.get('connections',4);speed=data.get('speed_limit',0)
-                if not isinstance(connections,int) or not 1<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
+                connections=data.get('connections',0);speed=data.get('speed_limit',0)
+                if not isinstance(connections,int) or not 0<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
                     raise PreviewError('连接数或限速参数无效。')
                 max_bytes=data.get('max_bytes',MAX_VIDEO_BYTES)
                 if max_bytes is not None and (type(max_bytes) is not int or max_bytes!=MAX_VIDEO_BYTES):
@@ -534,8 +534,8 @@ class Handler(BaseHTTPRequestHandler):
                 item=next((resource for resource in catalog['resources'] if resource['index']==data.get('index')),None)
                 if not item:raise PreviewError('请选择下载资源。')
                 item=dict(item)
-                connections=data.get('connections',4);speed=data.get('speed_limit',0)
-                if not isinstance(connections,int) or not 1<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
+                connections=data.get('connections',0);speed=data.get('speed_limit',0)
+                if not isinstance(connections,int) or not 0<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
                     raise PreviewError('连接数或限速参数无效。')
                 max_bytes=data.get('max_bytes',MAX_VIDEO_BYTES)
                 if max_bytes is not None and (type(max_bytes) is not int or max_bytes!=MAX_VIDEO_BYTES):
@@ -551,13 +551,20 @@ class Handler(BaseHTTPRequestHandler):
             elif path in {'/api/video/pause', '/api/video/resume', '/api/video/cancel', '/api/video/copy'}:
                 job = app.downloads.get(str(data.get('job_id', '')))
                 if path.endswith('/resume'):
-                    if 'max_bytes' in data:
-                        max_bytes=data['max_bytes']
+                    if any(key in data for key in ['connections','speed_limit','max_bytes']):
+                        connections=data.get('connections',0 if job.automatic else job.workers)
+                        speed=data.get('speed_limit',job.speed_limit)
+                        max_bytes=data.get('max_bytes',job.limit)
+                        if type(connections) is not int or not 0<=connections<=16 or type(speed) is not int or not 0<=speed<=100_000_000:
+                            raise PreviewError('连接数或限速参数无效。')
                         if max_bytes is not None and (type(max_bytes) is not int or max_bytes!=MAX_VIDEO_BYTES):
                             raise PreviewError('下载大小请选择 500 MB 或无限制。')
                         with job.lock:
-                            if job.thread and job.thread.is_alive():raise PreviewError('请等待任务暂停后再修改下载大小。')
+                            if job.thread and job.thread.is_alive():raise PreviewError('请等待任务暂停后再修改下载设置。')
+                            job.automatic=connections==0;job.workers=16 if job.automatic else connections
+                            job.speed_limit=speed
                             job.limit=max_bytes
+                            job.video['options']=dict(job.video.get('options') or {},connections=connections,speed_limit=speed)
                             job.save()
                     job.launch()
                 elif path.endswith('/copy'):

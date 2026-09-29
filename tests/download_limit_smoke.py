@@ -76,7 +76,7 @@ def run():
                 job=app.downloads.get(state['id']);assert wait(job)['status']=='error' and '超过' in job.error,job.snapshot()
                 assert not list(root.glob('*.bin'))
                 print('PASS: 500 MB mode rejects a real 512,000,128-byte resource.',flush=True)
-                state=post('/api/download/start',{'catalog_id':catalog['id'],'index':1,'max_bytes':None,'connections':8,'speed_limit':8_000_000})
+                state=post('/api/download/start',{'catalog_id':catalog['id'],'index':1,'max_bytes':None,'connections':0,'speed_limit':8_000_000})
                 job=app.downloads.get(state['id'])
                 deadline=time.monotonic()+10
                 while job.snapshot()['downloaded']<65536 and time.monotonic()<deadline:time.sleep(.005)

@@ -81,7 +81,10 @@ def verify_video_file_clipboard(expected_path):
     kernel.GlobalSize.argtypes = [wintypes.HGLOBAL]
     kernel.GlobalSize.restype = ctypes.c_size_t
     kernel.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-    assert user.OpenClipboard(None)
+    for _ in range(20):
+        if user.OpenClipboard(None):break
+        time.sleep(.03)
+    else:raise RuntimeError('The receiving clipboard remained busy.')
     try:
         handle = user.GetClipboardData(15)
         assert handle
@@ -100,7 +103,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
-    parser.add_argument('--expected-version',default='0.3.61')
+    parser.add_argument('--expected-version',default='0.3.62')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:

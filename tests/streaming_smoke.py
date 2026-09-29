@@ -61,7 +61,7 @@ def run():
                     url=base+'/'+mode+('/manifest.mpd' if mode=='dash' else '/index.m3u8')
                     catalog=imported_candidates(base+'/page',[
                         {'url':base+'/separate.mp4','kind':'video'}, {'url':base+'/separate.m4a','kind':'audio'}]) if mode=='pair' else resolve(url)
-                    if unlimited:catalog['resources'][0]['options']={'max_bytes':None}
+                    if unlimited:catalog['resources'][0]['options']={'max_bytes':None,'connections':0}
                     state=manager.start(catalog['resources'][0],catalog['source']);job=manager.get(state['id'])
                     if unlimited:assert job.limit is None
                     if mode=='hls':

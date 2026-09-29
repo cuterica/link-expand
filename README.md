@@ -6,21 +6,21 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.61)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.62)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.61-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.62-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.3.61`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.3.62`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.61)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.62)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
 
-Mac 版本显示 `v0.3.61`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.3.62`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 
@@ -83,9 +83,19 @@ bash run.sh
 | DASH 点播 | 音视频轨、SegmentTemplate / Timeline / List / Base、多 Period，下载后合并 |
 | 分离音视频文件 | 扩展恰好导入一个视频和一个音频时，额外提供合并为 MP4 的选项 |
 
-下载引擎由本项目独立实现，不调用 IDM、yt-dlp 或 aria2。可设置 1 / 4 / 8 / 16 个并行连接、限速；支持失败重试、暂停、继续、取消、SHA-256 校验、任务列表和进度保存。最多同时下载两个任务，其他任务等待。服务器提供 Range 和稳定资源标识时支持字节续传；不支持时使用单连接，暂停后重新开始。HLS / DASH 保留已完成分段，继续时先校验，再补下载剩余分段。退出软件会暂停任务；资源已变化时重新下载，避免混合新旧内容。
+下载引擎由本项目独立实现，不调用 IDM、yt-dlp 或 aria2。默认使用「自动（按实际网速调整）」连接模式，也可固定 1 / 4 / 8 / 16 个连接、限速；支持失败重试、暂停、继续、取消、SHA-256 校验、任务列表和进度保存。最多同时下载两个任务，其他任务等待。服务器提供 Range 和稳定资源标识时支持字节续传；不支持时使用单连接，暂停后重新开始。HLS / DASH 保留已完成分段，继续时先校验，再补下载剩余分段。退出软件会暂停任务；资源已变化时重新下载，避免混合新旧内容。
 
 完整文件保存到系统的 `下载/LinkExpand-videos`（为兼容已有版本保留目录名）。下载完成后可「另存文件」；Windows 的「复制文件」复制整个文件的文件列表格式，可粘贴到支持文件粘贴的微信 / QQ 或资源管理器。接收软件决定将它显示为视频还是文件。
+
+### 自动加速与网络适配
+
+v0.3.62 默认选择「自动（按实际网速调整）」，直接利用正在下载的真实数据判断速度。连接数从 4 起步，尝试增加到 8 / 16；有实际提速才保留，没有收益则回退，遇到网络错误或服务器忙碌时降低连接数。限速设为 0 时尽量利用当前服务器和线路可提供的带宽；用户设置的限速始终保留。已有任务可以暂停，切换自动模式后继续。
+
+下载任务复用已经验证的 DNS 结果、TLS 配置和完整读取后的 HTTP 连接；根据实际吞吐量调整请求分段，减少反复建连和小段请求。原域名有多个公网地址时，根据本机实际传输表现选择可用地址，失败地址暂时降级。速度显示采用最近约 5 秒的实际传输，不再被整个任务启动时的等待长期拉低。
+
+原有网址、公网 IP、TLS 证书、请求头来源、分段范围、资源标识和大小限制检查保留。未读完的响应、失效连接不会回收复用。暂停、退出和定期检查点保存已经落盘的进度，重开后重新评估当前网络。
+
+Windows 本机实测同一 687,010,986 字节 B 站视频：旧引擎全文件下载及校验约 200.29 秒，新引擎约 94.63 秒，两个成品 SHA-256 一致。这是包含写盘和完整性校验的真实完整文件测试，不是 2 MiB 短样本。速度受当时线路、服务器和磁盘影响，这个倍数不是所有网站的保证。详见 [自动加速验收报告](DOWNLOAD-SPEED-TEST-REPORT.md)。
 
 ### 免费合并组件
 
@@ -199,7 +209,7 @@ Mac 验证命令：
 ```bash
 python tests/macos_clipboard_smoke.py
 python tests/macos_full_chain.py --app path/to/LinkExpand.app --restart
-python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.61
+python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.62
 ```
 
 ## Mac 原生界面验收
