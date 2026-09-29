@@ -53,7 +53,7 @@ def verify_native_clipboard(preview):
         text = tree.find("EditElement[@type='0']").text
         assert preview['url'] in text and preview['title'] in text
         html = read(user.RegisterClipboardFormatW('HTML Format'))
-        assert b'file:///' in html and preview['url'].encode() in html
+        assert b'data:image/png;base64,' in html and preview['url'].encode() in html
         plain = read(13).decode('utf-16-le').split('\0', 1)[0]
         assert plain == preview['text']
     finally:
@@ -100,7 +100,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
-    parser.add_argument('--expected-version',default='0.3.5')
+    parser.add_argument('--expected-version',default='0.3.6')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:

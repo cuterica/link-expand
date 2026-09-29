@@ -146,7 +146,9 @@ def copy_rich(record, key: str):
             image_path = cache / (key + '.png')
             image_path.write_bytes(cover)
         text = plain_text(preview)
-        fragment = rich_html(preview, cover, image_path.as_uri() if image_path else None)
+        # HTML recipients cannot reliably load another app's file:// cache.
+        # Embed PNG in HTML; the native QQ format retains its file reference.
+        fragment = rich_html(preview, cover)
         if sys.platform=='darwin':
             from .macos_clipboard import copy_rich as copy_macos_rich
             copy_macos_rich(record,image_path)

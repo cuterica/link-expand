@@ -6,21 +6,21 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.5)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.6)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.5-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.6-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.3.5`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.3.6`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.5)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.6)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
 
-Mac 版本显示 `v0.3.5`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.3.6`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 
@@ -61,7 +61,7 @@ bash run.sh
 
 - 「手动编辑」修改标题、摘要；同一 URL 保留原来的画面。
 - 左侧「复制卡片」保持整张 PNG 图片和当前排版。
-- 右侧「复制图文与链接」一次复制图片、标题、摘要和真实 URL。Windows 分发版同时写入桌面聊天使用的图文格式、HTML 富文本和纯文本格式，让支持图文粘贴的微信 / QQ 读取同一次复制中的图片与文字。图片资源保存在本机，便于客户端读取。文字中的 URL 保留为真实链接，图片中的 URL 仍属于图片像素。
+- 右侧「复制图文与链接」一次复制图片、标题、摘要和真实 URL。Windows 分发版同时写入桌面聊天使用的图文格式、HTML 富文本和纯文本格式，让支持图文粘贴的微信 / QQ 读取同一次复制中的图片与文字。HTML 中直接内嵌 PNG，避免接收端无法读取本地图片路径；桌面聊天专用格式另保留本机图片缓存。文字中的 URL 保留为真实链接，图片中的 URL 仍属于图片像素。
 - macOS 原生图文复制同时提供带附件的 RTFD 与内嵌 PNG 的 HTML；Linux 浏览器方式使用带内嵌 PNG 的 HTML 富文本，可粘贴到支持富文本的文档、邮件或编辑器。纯文本输入框只会保留文字和链接；接收软件决定如何呈现排版。
 - 「下载卡片 PNG」导出整个预览；「下载图片 / 截图」导出画面。
 
@@ -107,7 +107,7 @@ Windows ZIP 内含 `browser-extension` 文件夹，Release 也提供单独的扩
 
 未启用浏览器联动时，X 走公开嵌入数据解析。实测样例：[X 官方开发者公开视频](https://x.com/TwitterDev/status/1460323737035677698)，完整 11.093 秒，1280×720，含 H.264 视频与 AAC 音频。专用接口可能调整，需要持续维护。
 
-B 站 HTTP 412 只说明当前请求被拦截，不能说明你日常 Edge 也需要验证。v0.3.5 的顺序是：普通读取 → 可选的公开 BV 链接解析接口 → Playwright 可见真实浏览器；已连接扩展时优先直接读取已正常打开的同一页面，不重新加载、不播放或关闭个人标签页。没有扩展也能触发回退。
+B 站 HTTP 412 只说明当前请求被拦截，不能说明你日常 Edge 也需要验证。v0.3.6 的顺序是：普通读取 → 可选的公开 BV 链接解析接口 → Playwright 可见真实浏览器；已连接扩展时优先直接读取已正常打开的同一页面，不重新加载、不播放或关闭个人标签页。没有扩展也能触发回退。
 
 公开视频解析采用 [fysh1010/bilibili-mcp 的接口](https://github.com/fysh1010/bilibili-mcp/blob/main/src/BilibiliApi.ts)，请求 `https://api.bugpk.com/api/bilibili`。只发送标准 BV 链接（保留分 P、去除追踪参数），不发送 Cookie、Authorization、网页正文或图片。页面提供开关，可以禁用此第三方回退；关闭后不请求该服务。解析结果和画质依赖服务，不承诺其长期可用或全部视频均能下载。
 
@@ -154,14 +154,14 @@ powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
 
 ## 构建 macOS 分发版
 
-在 Mac 上准备 Python 3.10 或以上版本，运行 `bash scripts/build_macos.sh`。构建环境位于 `~/Library/Application Support/LinkExpand/build-venv`；输出应用 ZIP 与 SHA-256 文件到 `dist`，自动选择本机 arm64 / x86_64 架构。应用内附 Python、Tcl/Tk、Pillow、Playwright、证书组件和依赖的许可证，不附带 Chrome 或 FFmpeg。
+在 Mac 上准备 Python 3.10 或以上版本，运行 `bash scripts/build_macos.sh`。构建环境位于 `~/Library/Application Support/LinkExpand/build-venv`；输出应用 ZIP 与 SHA-256 文件到 `dist`，自动选择本机 arm64 / x86_64 架构。应用内附 Python、PyObjC / WebKit 组件、Pillow、Playwright、证书组件和依赖的许可证，不附带 Chrome 或 FFmpeg。
 
 Mac 验证命令：
 
 ```bash
 python tests/macos_clipboard_smoke.py
 python tests/macos_full_chain.py --app path/to/LinkExpand.app --restart
-python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.5
+python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.6
 ```
 
 ## Mac 原生界面验收
@@ -169,3 +169,9 @@ python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand 
 在真实 Mac mini（arm64、macOS 27.0）运行打包后的 `.app`，从实际窗口用 Command-V 输入 B 站链接，经过真实预览、原生图文接收器粘贴、PNG 导出、完整视频下载、暂停、退出、重开、恢复任务、继续下载、原生文件接收和视频另存，最后退出应用。完整文件 140,922,591 字节，各接收端和导出副本 SHA-256 一致。测试不以源码后台或只检查剪贴板格式替代窗口流程。
 
 验收脚本：`tests/macos_full_chain.py --app path/to/LinkExpand.app --restart`。GUI 测试接口仅在显式 `--ui-test` 下启用，仍要求本机会话认证；正常发布运行不启用。测试截图和详细报告随版本发布。
+
+## Windows 界面验收
+
+v0.3.6 使用真实 Windows 系统上的分发 EXE 和独立可见浏览器，从 Control-V 输入 B 站链接开始，实际操作预览、编辑、图文复制与接收编辑器粘贴、图片导出、视频下载、暂停、退出重开、续传、完整文件粘贴和另存。完整文件 140,922,591 字节，接收端实际读取文件后计算的 SHA-256 与原文件一致。
+
+[Windows 验收报告](WINDOWS-TEST-REPORT.md) 记录步骤、边界和修复。测试脚本为 `python tests/windows_full_chain.py path/to/LinkExpand-0.3.6-Windows-x64.exe`。发布附件 `Windows-validation-v0.3.6.zip` 包含实际界面截图和日志；没有把微信 / QQ 的实际客户端列为已验收。Mac 完整链路记录见 [Mac 验收报告](MACOS-TEST-REPORT.md)，v0.3.6 Mac 包另通过原生窗口、实际图文粘贴、图片导出和退出回归。
