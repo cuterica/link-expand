@@ -49,6 +49,7 @@ class App:
         self.bridge = BrowserBridge()
         self.bridge_token = pairing_key()
         self.real_browser_slot = threading.BoundedSemaphore(1)
+        self.native_ui=None
 
     def real_browser(self,url,session=None):
         if not self.real_browser_slot.acquire(blocking=False):
@@ -336,6 +337,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond_json(200, {'native_rich': os.name == 'nt' or sys.platform=='darwin', 'version': __version__,
                                        'copy_video': os.name == 'nt' or sys.platform=='darwin', 'platform':sys.platform,'max_video_bytes': MAX_VIDEO_BYTES,
                                        'ffmpeg':bool(__import__('linkexpand.streaming',fromlist=['ffmpeg_path']).ffmpeg_path()),
+                                       'native_shell':self.server.app.native_ui is not None,'native_image_copy':sys.platform=='darwin',
                                        'browser_pairing_key':app.bridge_token})
         elif path=='/api/browser/status' or re.fullmatch(r'/api/browser/jobs/[a-f0-9]{24}',path):
             if not self.authenticated():return
@@ -451,6 +453,38 @@ class Handler(BaseHTTPRequestHandler):
                 key = str(data.get('id', ''))
                 copy_rich(app.get_record(key), key)
                 result = {'ok': True}
+            elif path=='/api/copy-image':
+                from .clipboard import copy_image
+                copy_image(app.get_record(str(data.get('id',''))));result={'ok':True}
+            elif path=='/api/copy-text':
+                from .clipboard import copy_text
+                text=str(data.get('text',''))
+                if len(text)>65536:raise PreviewError('复制文字过长。')
+                copy_text(text);result={'ok':True}
+            elif path=='/api/native/save-image':
+                if not app.native_ui:raise PreviewError('此操作仅适用于 Mac 原生窗口。')
+                record=app.get_record(str(data.get('id','')))
+                asset=data.get('asset','card')
+                if asset not in {'card','visual'}:raise PreviewError('图片类型无效。')
+                payload=record['png'] if asset=='card' else record['visual']
+                if not payload:raise PreviewError('没有可保存的图片。')
+                result=app.native_ui.save('link-preview.png' if asset=='card' else 'link-image.png',data=payload)
+            elif path=='/api/native/save-video':
+                if not app.native_ui:raise PreviewError('此操作仅适用于 Mac 原生窗口。')
+                job=app.downloads.get(str(data.get('job_id','')))
+                if job.status!='complete' or not job.valid_file():raise PreviewError('下载文件尚未完成或已被移动。')
+                result=app.native_ui.save(job.filename,source=job.file)
+            elif path=='/api/native/open-url':
+                if not app.native_ui:raise PreviewError('此操作仅适用于 Mac 原生窗口。')
+                open_page(normalize_url(str(data.get('url',''))));result={'ok':True}
+            elif path=='/api/native/quit':
+                if not app.native_ui:raise PreviewError('此操作仅适用于 Mac 原生窗口。')
+                from PyObjCTools import AppHelper
+                AppHelper.callLater(.1,app.native_ui.stop);result={'ok':True}
+            elif path=='/api/qa':
+                if not app.native_ui or not app.native_ui.qa:
+                    self.respond_json(404,{'error':'页面不存在。'});return
+                result=app.native_ui.qa_action(data)
             elif path == '/api/video/start':
                 record = app.get_record(str(data.get('id', '')))
                 index = data.get('video_index')
@@ -538,8 +572,14 @@ def main():
     parser = argparse.ArgumentParser(description="Link Expand · 本地链接预览")
     parser.add_argument("--port", type=int)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument('--native-window',action='store_true',help=argparse.SUPPRESS)
+    parser.add_argument('--ui-test',action='store_true',help=argparse.SUPPRESS)
+    parser.add_argument('--test-downloads-root',type=Path,help=argparse.SUPPRESS)
     args = parser.parse_args()
     app = App()
+    if args.test_downloads_root:
+        if not args.ui_test:parser.error('--test-downloads-root requires --ui-test')
+        app._downloads=DownloadManager(args.test_downloads_root)
     preferred_port = args.port if args.port is not None else 8765
     try:
         server = Server(("127.0.0.1", preferred_port), app)
@@ -560,12 +600,13 @@ def main():
         server = Server(('127.0.0.1', 0), app)
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"Link Expand 已启动：{url}\n按 Ctrl+C 退出。", flush=True)
-    if not args.no_browser:
+    native_mac=sys.platform=='darwin' and not args.no_browser and (getattr(sys,'frozen',False) or args.native_window)
+    if not args.no_browser and not native_mac:
         open_page(url)
     try:
-        if sys.platform=='darwin' and getattr(sys,'frozen',False) and not args.no_browser:
-            from .macos_app import run
-            run(server,url)
+        if native_mac:
+            from .macos_window import run
+            run(server,url,args.ui_test)
         else:server.serve_forever()
     except KeyboardInterrupt:
         pass

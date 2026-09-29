@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def notices(target):
     target.mkdir(parents=True, exist_ok=True)
     packages=["pillow", "playwright", "greenlet", "pyee", "typing-extensions", "pyinstaller"]
-    if sys.platform=='darwin':packages+=['certifi','macholib','altgraph']
+    if sys.platform=='darwin':packages+=['certifi','macholib','altgraph','pyobjc-core','pyobjc-framework-Cocoa','pyobjc-framework-WebKit']
     for package in packages:
         distribution = metadata.distribution(package)
         for item in distribution.files or []:

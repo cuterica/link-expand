@@ -18,6 +18,9 @@ let videoJobId = null;
 let videoPolling = false;
 let downloadCatalog = null;
 let browserPairingKey = '';
+let nativeShell=false;
+let nativeImageCopy=false;
+let appPlatform='';
 const actionIds = ['copy-image', 'copy-text', 'download', 'download-cover'];
 try { $('bili-parser').checked = localStorage.getItem('bili-parser') !== 'false'; } catch (_) {}
 $('bili-parser').addEventListener('change',()=>{try {localStorage.setItem('bili-parser',String($('bili-parser').checked));}catch(_){} lastRequested='';});
@@ -178,14 +181,17 @@ $('editor').addEventListener('submit', async event => {
   setBusy(true);
   try {
     const sameURL = current && $('url-input').value.trim() === current.url;
+    const preservedCatalog=sameURL?downloadCatalog:null;
     const data = {url: $('url-input').value.trim(), title: $('title-input').value,
       description: $('description-input').value, ...(sameURL ? {id: current.id, site_name: current.site_name} : {})};
     await display(await api(sameURL ? '/api/edit' : '/api/manual', data), job);
+    if(job===revision && preservedCatalog)displayCatalog(preservedCatalog);
     toast('卡片内容已更新');
   } catch (error) { feedback(error.message, true); setBusy(false); }
 });
 
 async function writeCardImage() {
+  if (nativeImageCopy) {await api('/api/copy-image',{id:current.id});return;}
   if (!navigator.clipboard?.write || !window.ClipboardItem) throw new Error('浏览器不支持复制图片，请下载 PNG。');
   if (!cardBlob) throw new Error('卡片尚未加载，请稍后重试或下载 PNG。');
   await navigator.clipboard.write([new ClipboardItem({'image/png': cardBlob})]);
@@ -216,8 +222,12 @@ $('copy-text').addEventListener('click', async () => {
   } catch (error) { feedback('复制失败：' + error.message, true); }
 });
 
-function download(url, filename) {
+async function download(url, filename) {
   if (!current || busy || !url) return;
+  if (nativeShell) {
+    try {const result=await api('/api/native/save-image',{id:current.id,asset:filename==='link-preview.png'?'card':'visual'});if(!result.cancelled)toast('图片已保存到：'+result.path);}
+    catch(error){feedback(error.message,true);}return;
+  }
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -235,6 +245,10 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
   .then(capabilities => {
     if (capabilities.version !== expectedVersion) throw new Error('页面与后台版本不一致，请关闭旧程序并重新启动新版。');
     nativeRich = capabilities.native_rich;
+    nativeShell=capabilities.native_shell;
+    nativeImageCopy=capabilities.native_image_copy;
+    appPlatform=capabilities.platform;
+    $('native-quit').hidden=!nativeShell;
     browserPairingKey = capabilities.browser_pairing_key || token;
     canCopyVideo = capabilities.copy_video;
     $('merge-component').textContent = capabilities.ffmpeg ? 'HLS / DASH 合并组件：已就绪' : 'HLS / DASH 合并需要免费的 FFmpeg；文件和普通视频直链不需要。';
@@ -366,11 +380,15 @@ $('video-copy').addEventListener('click', async () => {
   if (!videoJobId || videoJob?.status !== 'complete') return;
   try {
     await api('/api/video/copy', {job_id: videoJobId});
-    toast('完整文件已复制，可粘贴到聊天或资源管理器');
+    toast(appPlatform==='darwin'?'完整文件已复制，可粘贴到聊天或 Finder':'完整文件已复制，可粘贴到聊天或资源管理器');
   } catch (error) { videoError(error.message); }
 });
-$('video-save').addEventListener('click', () => {
+$('video-save').addEventListener('click', async () => {
   if (!videoJobId || videoJob?.status !== 'complete') return;
+  if (nativeShell) {
+    try {const result=await api('/api/native/save-video',{job_id:videoJobId});if(!result.cancelled)toast('完整文件已另存到：'+result.path);}
+    catch(error){videoError(error.message);}return;
+  }
   const link = document.createElement('a');
   link.href = '/downloads/' + videoJobId + '/file';
   link.download = videoJob.filename;
@@ -412,7 +430,14 @@ async function resolveDownload(scan) {
 $('download-resolve').addEventListener('click',()=>resolveDownload(false));
 $('download-scan').addEventListener('click',()=>resolveDownload(true));
 $('download-url').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();resolveDownload(false);}});
-$('capture-pair').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(browserPairingKey || token);toast('配对码已复制。在扩展填写地址和配对码，点击“启用自动联动”；软件重启后仍然有效。');}catch(error){videoError(error.message);}});
+$('capture-pair').addEventListener('click',async()=>{try{if(nativeShell)await api('/api/copy-text',{text:browserPairingKey || token});else await navigator.clipboard.writeText(browserPairingKey || token);toast('配对码已复制。在扩展填写地址和配对码，点击“启用自动联动”；软件重启后仍然有效。');}catch(error){videoError(error.message);}});
+$('native-quit').addEventListener('click',()=>api('/api/native/quit',{}).catch(error=>feedback(error.message,true)));
+document.addEventListener('click',event=>{
+  const link=event.target.closest('a');
+  if(nativeShell && link && !link.download && /^https?:/.test(link.href) && new URL(link.href).origin!==location.origin){
+    event.preventDefault();api('/api/native/open-url',{url:link.href}).catch(error=>feedback(error.message,true));
+  }
+});
 async function refreshBrowserStatus() {
   try {
     const status=await browserStatus();

@@ -16,6 +16,22 @@ from .sharing import rich_html
 LOCK = threading.Lock()
 
 
+def copy_image(record):
+    if sys.platform!='darwin':raise PreviewError('当前系统请使用浏览器复制图片。')
+    from .macos_clipboard import Cocoa
+    with LOCK:
+        cocoa=Cocoa()
+        with cocoa.pool():cocoa.set_payloads([('public.png',record['png'])])
+
+
+def copy_text(text):
+    if sys.platform!='darwin':raise PreviewError('当前系统请使用浏览器复制文字。')
+    from .macos_clipboard import Cocoa
+    with LOCK:
+        cocoa=Cocoa()
+        with cocoa.pool():cocoa.set_payloads([('public.utf8-plain-text',text.encode('utf-8'))])
+
+
 def file_drop_payload(path: Path) -> bytes:
     # DROPFILES: pFiles, point.x, point.y, fNC, fWide; double-NUL UTF-16 file list.
     return struct.pack('<IiiII', 20, 0, 0, 0, 1) + (str(path.resolve()) + '\0\0').encode('utf-16-le')

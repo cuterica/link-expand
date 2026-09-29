@@ -29,6 +29,7 @@ def main():
     shutil.copy2(ROOT/'packaging'/'entrypoint.py',stage/'entrypoint.py')
     licenses=work/'licenses';notices(licenses)
     command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--windowed','--name','LinkExpand',
+             '--exclude-module','tkinter',
              '--target-architecture',arch,'--osx-bundle-identifier','com.cuterica.linkexpand','--collect-all','playwright',
              '--collect-data','certifi','--add-data',f'{stage/"linkexpand"/"static"}:linkexpand/static',
              '--add-data',f'{ROOT/"browser-extension"}:browser-extension',
@@ -52,14 +53,15 @@ def main():
     (bundle/'使用说明.txt').write_text(
         f'Link Expand {version} · macOS {arch}\n\n'
         '解压 ZIP，双击 LinkExpand.app；也可以将它拖到应用程序文件夹。无需 Python。\n'
-        '使用原有本地网页界面；启动窗口可以重新打开界面、打开下载文件夹或退出。\n'
+        '使用 Mac 原生窗口承载原有界面；支持 Command+C/V/Q，不需另外打开浏览器。\n'
         'B 站常规读取失败可用第三方公开 BV 链接解析；界面可关闭，只发送标准链接。\n'
         '仍失败时自动用 Playwright 打开真实 Chrome；不安装 Edge。\n'
         '未做 Apple 商业签名与公证。首次启动如被拦截，请到系统设置 → 隐私与安全性 → 仍要打开。\n'
         '链接展开、选图、截图与图文复制；通用文件、视频、HLS/DASH 点播下载，最多 500 MB。\n'
-        '截图优先使用已安装的 Chrome；没有时可在启动窗口安装独立截图组件。\n'
+        '截图优先使用已安装的 Chrome；没有时可在 Link Expand 菜单安装独立截图组件。\n'
         '图文复制提供嵌入图片和链接的 RTFD、HTML、PNG 和文字，接收软件决定粘贴格式。\n'
         '下载完成可复制整个文件；保存目录 ~/Downloads/LinkExpand-videos。\n'
+        '图片和另存文件导出到 ~/Downloads/LinkExpand-exports，同名文件不覆盖。\n'
         'HLS/DASH、分离音视频合并需要免费的 FFmpeg（不内嵌）。可用 brew install ffmpeg，\n'
         '或把 ffmpeg 放到 ~/Library/Application Support/LinkExpand/tools/ffmpeg。\n'
         '附带 Chrome 联动扩展；按 browser-extension/README.md 安装配对一次，启用自动联动。\n'
