@@ -6,21 +6,21 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.3)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.4)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.3-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.4-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.3.3`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.3.4`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.3)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。启动窗口提供打开界面、打开下载文件夹和退出功能；下载与卡片界面沿用 Windows 版。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.4)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。启动窗口提供打开界面、打开下载文件夹和退出功能；下载与卡片界面沿用 Windows 版。
 
-Mac 版本显示 `v0.3.3`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在启动窗口安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.3.4`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在启动窗口安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 
@@ -99,7 +99,7 @@ Windows ZIP 内含 `browser-extension` 文件夹，Release 也提供单独的扩
 
 在软件内「下载设置、请求头与浏览器捕获」复制配对码；扩展内填写软件当前本地地址和配对码，点击「启用自动联动」并授予网站访问权限。只需设置一次，软件重启后配对码仍有效。软件显示「Edge / Chrome 已连接」后，输入链接会自动读取标题、摘要、封面和视频资源，显示下载或音视频合并选项，无需逐条手动导入。无可用图片时，默认通过可选调试权限截取自己创建的后台标签页，不切换前台标签页。详见 [扩展使用说明](browser-extension/README.md)。
 
-请求头也可以手动填入 JSON，例如 `{"Referer":"https://example.com/"}`。Cookie / Authorization 仅存在本次运行的内存中，不写入任务状态，不随跳转发送给其他来源。需要登录的任务重启后应再次识别或导入以补充请求头。扩展只处理软件提交链接后创建的后台标签页，以及你手动启用捕获的标签页。自动标签页静音并在完成或取消后关闭；手动捕获十分钟后停止。关闭自动联动后不再接受新任务。
+请求头也可以手动填入 JSON，例如 `{"Referer":"https://example.com/"}`。下载请求的 Cookie / Authorization 仅存在本次运行的内存中，不写入任务状态，不随跳转发送给其他来源。Playwright 独立浏览器目录可能保存该窗口的网站登录状态，和下载任务文件分开。需要登录的任务重启后应再次识别或导入以补充请求头。扩展只处理软件提交链接后创建的后台标签页，以及你手动启用捕获的标签页。自动标签页静音并在完成或取消后关闭；手动捕获十分钟后停止。关闭自动联动后不再接受新任务。
 
 ### 兼容范围
 
@@ -107,11 +107,17 @@ Windows ZIP 内含 `browser-extension` 文件夹，Release 也提供单独的扩
 
 未启用浏览器联动时，X 走公开嵌入数据解析。实测样例：[X 官方开发者公开视频](https://x.com/TwitterDev/status/1460323737035677698)，完整 11.093 秒，1280×720，含 H.264 视频与 AAC 音频。专用接口可能调整，需要持续维护。
 
-B 站的 HTTP 412 表示本次请求被其安全风控拦截，不能据此判断视频不存在。v0.3.3 的自动联动使用已配对 Edge / Chrome 的实际登录会话，在该浏览器中打开软件提交的链接，返回预览和播放器媒体请求；后台无需重新请求被拦截的网页。若网页仍要求验证码或重新登录，需要先在浏览器完成，再在软件重试。此机制已用真实 MV3 扩展和带登录会话的测试网页验证；用户提供的 B 站链接尚未在其个人 Edge 登录环境中实测，不保证绕过风控。
+B 站 HTTP 412 只说明当前请求被拦截，不能说明你日常 Edge 也需要验证。v0.3.4 的顺序是：普通读取 → 可选的公开 BV 链接解析接口 → Playwright 可见真实浏览器；已连接扩展时优先直接读取已正常打开的同一页面，不重新加载、不播放或关闭个人标签页。没有扩展也能触发回退。
+
+公开视频解析采用 [fysh1010/bilibili-mcp 的接口](https://github.com/fysh1010/bilibili-mcp/blob/main/src/BilibiliApi.ts)，请求 `https://api.bugpk.com/api/bilibili`。只发送标准 BV 链接（保留分 P、去除追踪参数），不发送 Cookie、Authorization、网页正文或图片。页面提供开关，可以禁用此第三方回退；关闭后不请求该服务。解析结果和画质依赖服务，不承诺其长期可用或全部视频均能下载。
+
+实际验收链接 `BV1cSec6tEux`：在扩展未连接时，软件成功展示标题、摘要、封面及下载选项；完整下载 140,922,591 字节，1280×590 H.264 + AAC，1631.296 秒，SHA-256 `ecfcbb24a8b74f699bdbec3a5906fd36b38fd21de99de81dbf4d46a8ec6b9d6c`。可见 Edge 的独立匿名会话实测仍为 412，因此不把“打开浏览器”当成解决风控的保证。
+
+Playwright 回退使用安装的 Windows Edge / Mac Chrome，以浏览器自己的 TLS、Cookie 和 JavaScript 访问，不经过旧截图模块的 Python HTTP 重放。它使用 Link Expand 专用浏览器目录；首次需要登录时可在此窗口正常登录，状态由这个独立浏览器在本机保存。通过扩展共享时只读取当前网站适用的 Cookie，保留 Cookie 的安全属性，不解密或复制整个个人浏览器配置。
 
 ## 本地运行
 
-服务仅监听 `127.0.0.1`，网页、摘要和图片不上传到第三方服务。浏览器配对码只保存在本机用户目录；登录 Cookies 不会整库读取或解密。只在输入链接后请求网页和它的公开资源。最近 24 张卡片在内存中保存，退出后清空；不记录 URL、标题和摘要日志。
+服务仅监听 `127.0.0.1`，网页、摘要和图片不上传到第三方服务；开启 B 站第三方回退时会发送标准公开 BV 链接。浏览器配对码只保存在本机用户目录；登录 Cookies 不会整库读取或解密。只在输入链接后请求网页和它的公开资源。最近 24 张卡片在内存中保存，退出后清空；不记录 URL、标题和摘要日志。
 
 Windows 图文复制所需的图片缓存位于 `%LOCALAPPDATA%\LinkExpand\clipboard`。为支持退出程序后粘贴，图片会暂时保留；后续复制会清理超过 7 天或最近 48 张之外的旧图片。
 
@@ -155,5 +161,5 @@ Mac 验证命令：
 ```bash
 python tests/macos_clipboard_smoke.py
 python tests/macos_app_smoke.py
-python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.3
+python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.4
 ```

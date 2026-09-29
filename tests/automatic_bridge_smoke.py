@@ -76,6 +76,22 @@ def main():
                 ui.wait_for_timeout(1200)
                 assert not [p for p in context.pages if p.url == target], 'Owned background tab was left open'
                 assert user_tab.title() == 'User tab preserved'
+                # An already working Bilibili page is reused despite tracking parameters.
+                navigations=[]
+                def bili_fixture(route):
+                    navigations.append(route.request.url)
+                    route.fulfill(content_type='text/html; charset=utf-8',body='''<meta charset="utf-8"><title>已正常打开的 B 站页面</title>
+                      <meta property="og:description" content="直接复用当前页面"><video id="untouched"></video>
+                      <script>window.__playinfo__={data:{dash:{video:[{baseUrl:'https://cdn.example.com/complete-video.m4s'}],audio:[{baseUrl:'https://cdn.example.com/complete-audio.m4s'}]}}};</script>''')
+                context.route('https://www.bilibili.com/video/**',bili_fixture)
+                working=context.new_page();working.goto('https://www.bilibili.com/video/BV1cSec6tEux/?spm_id_from=old')
+                ui.locator('#url-input').fill('https://www.bilibili.com/video/BV1cSec6tEux/?spm_id_from=new')
+                expect(ui.locator('#card-title')).to_have_text('已正常打开的 B 站页面',timeout=15000)
+                expect(ui.locator('#video-choice option').first).to_contain_text('PAIR')
+                assert len(navigations)==1,'The existing working page was reloaded or duplicated'
+                assert not working.is_closed(),'A personal tab was closed'
+                assert working.locator('#untouched').evaluate('video=>video.paused && !video.muted'),'A personal video was played or muted'
+                working.close()
                 ui.locator('#url-input').fill('https://signed-in.example/article')
                 expect(ui.locator('#card-title')).to_have_text('无图网页', timeout=45000)
                 expect(ui.locator('#preview-badge')).to_have_text('浏览器网页截图')

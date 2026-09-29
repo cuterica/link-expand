@@ -19,6 +19,8 @@ let videoPolling = false;
 let downloadCatalog = null;
 let browserPairingKey = '';
 const actionIds = ['copy-image', 'copy-text', 'download', 'download-cover'];
+try { $('bili-parser').checked = localStorage.getItem('bili-parser') !== 'false'; } catch (_) {}
+$('bili-parser').addEventListener('change',()=>{try {localStorage.setItem('bili-parser',String($('bili-parser').checked));}catch(_){} lastRequested='';});
 
 async function api(path, data, signal) {
   const response = await fetch(path, {method: 'POST', signal,
@@ -34,7 +36,7 @@ async function browserStatus() {
   return response.json();
 }
 async function browserExpand(url, signal) {
-  const job = await api('/api/browser/request', {url}, signal);
+  const job = await api('/api/browser/request', {url,bili_parser:$('bili-parser').checked}, signal);
   const cancel = () => { void api('/api/browser/cancel', {id: job.id}).catch(() => {}); };
   signal?.addEventListener('abort', cancel, {once: true});
   try {
@@ -45,6 +47,7 @@ async function browserExpand(url, signal) {
       if (!response.ok || state.status === 'error') throw new Error(state.error || '浏览器读取失败。');
       if (state.status === 'cancelled') throw new DOMException('Cancelled', 'AbortError');
       if (state.status === 'complete') return state.result;
+      if (state.status === 'fallback') feedback('常规读取失败，正在尝试备用解析；必要时会用 Playwright 打开真实浏览器窗口…');
       await new Promise(resolve => setTimeout(resolve, 700));
     }
   } finally { signal?.removeEventListener('abort', cancel); }
@@ -130,7 +133,9 @@ async function expand(force = false) {
       await display(result.preview, job);
       if (job === revision && result.catalog) displayCatalog(result.catalog);
     } else {
-      await display(await api('/api/preview', {url}, signal), job);
+      const preview=await api('/api/preview', {url,bili_parser:$('bili-parser').checked}, signal);
+      await display(preview, job);
+      if (job === revision && preview.catalog) displayCatalog(preview.catalog);
     }
   }
   catch (error) {
@@ -393,14 +398,14 @@ async function resolveDownload(scan) {
     if (status.connected && !Object.keys(headers).length) {
       // File links and public X APIs still use the downloader directly.
       let catalog;
-      try { catalog=await api('/api/download/resolve',{url,headers,scan:false}); } catch (_) {}
+      try { catalog=await api('/api/download/resolve',{url,headers,scan:false,bili_parser:$('bili-parser').checked}); } catch (_) {}
       if (catalog?.resources?.length) displayCatalog(catalog);
       else {
         const result=await browserExpand(url);
         if (!result.catalog?.resources?.length) throw new Error('浏览器已读取网页，但尚未发现可下载媒体。需要安全验证时，请在浏览器完成后重试；也可手动捕获播放请求。');
         displayCatalog(result.catalog);
       }
-    } else displayCatalog(await api('/api/download/resolve',{url,headers,scan}));
+    } else displayCatalog(await api('/api/download/resolve',{url,headers,scan,bili_parser:$('bili-parser').checked}));
   } catch (error) {videoError(error.message);}
   finally {buttons.forEach(button=>button.disabled=false);}
 }
@@ -411,7 +416,7 @@ $('capture-pair').addEventListener('click',async()=>{try{await navigator.clipboa
 async function refreshBrowserStatus() {
   try {
     const status=await browserStatus();
-    $('browser-status').textContent=status.connected ? `${status.browsers.join(' / ')} 已连接 · 输入链接即可自动读取预览和媒体` : '浏览器自动联动未连接 · 在扩展中配对并启用一次即可';
+    $('browser-status').textContent=status.connected ? `${status.browsers.join(' / ')} 已连接 · 优先读取已正常打开的页面` : '可以直接展开链接 · 浏览器扩展未连接（选用）';
   } catch (_) { $('browser-status').textContent='浏览器联动暂时无法连接'; }
 }
 setInterval(refreshBrowserStatus, 5000);

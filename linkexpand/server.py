@@ -48,6 +48,54 @@ class App:
         self.browser_preview_id = None
         self.bridge = BrowserBridge()
         self.bridge_token = pairing_key()
+        self.real_browser_slot = threading.BoundedSemaphore(1)
+
+    def real_browser(self,url,session=None):
+        if not self.real_browser_slot.acquire(blocking=False):
+            raise PreviewError('真实浏览器正在读取另一条链接，请稍后重试。')
+        try:
+            from .owned_process import run_worker
+            command=([sys.executable,'--real-browser-worker'] if getattr(sys,'frozen',False)
+                     else [sys.executable,'-m','linkexpand.browser_real'])
+            process=run_worker(command,json.dumps({'url':normalize_url(url),'session':session}),75)
+            data=json.loads(process.stdout)
+            if process.returncode or data.get('error'):raise PreviewError(data.get('error','真实浏览器读取失败。'))
+            preview=self.browser_preview(data['preview'],data['source'])
+            catalog=None
+            if data.get('candidates'):
+                from .media_resolver import imported_candidates
+                result=imported_candidates(data['source'],data['candidates']);result['preview']=preview
+                catalog=self.catalog(result)
+            return {'preview':preview,'catalog':catalog,'method':'playwright-visible'}
+        except subprocess.TimeoutExpired:raise PreviewError('真实浏览器读取超时，已关闭软件自己的浏览器窗口。') from None
+        except (OSError,ValueError) as error:
+            if isinstance(error,PreviewError):raise
+            raise PreviewError('无法启动真实浏览器回退，请确认已安装 Edge / Chrome。') from None
+        finally:self.real_browser_slot.release()
+
+    def bilibili_public(self,url):
+        from .bilibili_parser import parse
+        data=parse(url)
+        preview=self.browser_preview(data['preview'],data['source'])
+        catalog=data['catalog']
+        if catalog:
+            catalog['preview']=preview;catalog=self.catalog(catalog)
+        return {'preview':preview,'catalog':catalog,'method':data['method']}
+
+    def fallback_job(self,key,client,session=None):
+        url=self.bridge.fallback(key,client)
+        if not url:return {'accepted':False}
+        def read():
+            try:
+                from .bilibili_parser import public_reference
+                if self.bridge.get(key).get('use_parser',True) and public_reference(url):
+                    try:result=self.bilibili_public(url)
+                    except PreviewError:result=self.real_browser(url,session)
+                else:result=self.real_browser(url,session)
+                self.bridge.finish(key,client,result)
+            except PreviewError as error:self.bridge.finish(key,client,error=error)
+        threading.Thread(target=read,daemon=True).start()
+        return {'accepted':True,'fallback':'playwright-visible'}
 
     def browser_preview(self,data,source):
         if not isinstance(data,dict):raise PreviewError('浏览器网页预览数据无效。')
@@ -58,7 +106,7 @@ class App:
         domain=urlsplit(url).hostname.removeprefix('www.')
         from .metadata import concise_summary,fetch_resource,MAX_IMAGE
         preview=Preview(url,title,concise_summary(str(data.get('description',''))),domain,
-                        clean_text(str(data.get('site_name','')),80) or domain,summary_source='浏览器网页摘要')
+                        clean_text(str(data.get('site_name','')),80) or domain,summary_source=clean_text(str(data.get('summary_source','浏览器网页摘要')),60))
         image=str(data.get('image_url',''))
         image_data=data.get('image_data')
         if image_data:
@@ -78,7 +126,7 @@ class App:
         elif image:
             try:
                 preview.image=fetch_resource(normalize_url(image),MAX_IMAGE,timeout=8,headers={'Referer':url,'User-Agent':'Mozilla/5.0'}).body
-                preview.visual_source='浏览器封面'
+                preview.visual_source=clean_text(str(data.get('visual_source','浏览器封面')),60)
             except PreviewError:preview.warnings.append('浏览器的标题和摘要已导入，封面暂时无法读取。')
         visual=original_visual(preview);preview.image=visual;cover=thumbnail(preview);preview.image=None
         result=self.put(preview,cover,visual)
@@ -145,11 +193,24 @@ class App:
             raise PreviewError("预览已过期，请重新生成。")
         return record
 
-    def create(self, url):
+    def create(self, url, use_parser=True):
         if not self.fetch_slots.acquire(blocking=False):
             raise PreviewError("正在处理其他链接，请稍后重试。")
         try:
-            preview = get_preview(url)
+            try:preview = get_preview(url)
+            except PreviewError as first_error:
+                from .bilibili_parser import public_reference
+                if use_parser and public_reference(url):
+                    try:
+                        result=self.bilibili_public(url);preview=dict(result['preview']);preview['catalog']=result['catalog']
+                        return preview
+                    except PreviewError:pass
+                try:
+                    result=self.real_browser(url)
+                    preview=dict(result['preview']);preview['catalog']=result['catalog']
+                    return preview
+                except PreviewError as second_error:
+                    raise PreviewError(f'{first_error} 自动回退结果：{second_error}') from None
             attach_visual(preview)
             visual = original_visual(preview)
             preview.image = visual
@@ -356,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
             app = self.server.app
             path = urlsplit(self.path).path
             if path=='/api/browser/request':
-                result=app.bridge.request(str(data.get('url','')))
+                result=app.bridge.request(str(data.get('url','')),data.get('bili_parser') is not False)
             elif path=='/api/browser/cancel':
                 result=app.bridge.cancel(str(data.get('id','')))
             elif path=='/api/browser/poll':
@@ -364,7 +425,8 @@ class Handler(BaseHTTPRequestHandler):
             elif path=='/api/browser/result':
                 key=str(data.get('id',''));client=str(data.get('client_id',''))
                 if not app.bridge.accepts(key,client):result={'accepted':False}
-                elif data.get('error'):result=app.bridge.finish(key,client,error=data['error'])
+                elif data.get('error'):
+                    result=app.fallback_job(key,client,data.get('session'))
                 else:
                     try:
                         source=str(data.get('source',''))
@@ -380,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
                         result=app.bridge.finish(key,client,{'preview':preview,'catalog':catalog})
                     except PreviewError as error:result=app.bridge.finish(key,client,error=error)
             elif path == "/api/preview":
-                result = app.create(str(data.get("url", "")))
+                result = app.create(str(data.get("url", "")),data.get('bili_parser') is not False)
             elif path == "/api/manual":
                 result = app.manual(data)
             elif path == "/api/edit":
@@ -405,7 +467,15 @@ class Handler(BaseHTTPRequestHandler):
             elif path=='/api/download/resolve':
                 from .media_resolver import resolve
                 if not app.fetch_slots.acquire(blocking=False):raise PreviewError('正在处理其他链接，请稍后重试。')
-                try:result=app.catalog(resolve(str(data.get('url','')),data.get('headers'),data.get('scan') is True))
+                try:
+                    url=str(data.get('url',''))
+                    try:result=app.catalog(resolve(url,data.get('headers'),data.get('scan') is True))
+                    except PreviewError:
+                        from .bilibili_parser import public_reference
+                        if data.get('bili_parser') is False or not public_reference(url):raise
+                        resolved=app.bilibili_public(url)
+                        if not resolved['catalog']:raise PreviewError('已取得 B 站预览，但接口没有提供完整视频地址。')
+                        result=resolved['catalog']
                 finally:app.fetch_slots.release()
             elif path=='/api/capture/import':
                 from .media_resolver import imported_candidates

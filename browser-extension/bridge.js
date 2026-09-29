@@ -21,9 +21,11 @@ async function readTab(tabId, play) {
 }
 function selectResources(captured, discovered) {
   const resources = new Map();
+  const declared = new Set(discovered.map(item=>item.url));
   // Observed request headers take priority over DOM-only addresses.
   for (const resource of [...discovered, ...captured]) {
-    if (!/^https?:/.test(resource.url || '') || /\.(ts|m4s)(?:[?#]|$)/i.test(resource.url)) continue;
+    if (!/^https?:/.test(resource.url || '') || /\.ts(?:[?#]|$)/i.test(resource.url)) continue;
+    if (/\.m4s(?:[?#]|$)/i.test(resource.url) && !declared.has(resource.url) && !/(^|\.)bilivideo\.com$/i.test(new URL(resource.url).hostname)) continue;
     const canonical = new URL(resource.url);
     if (/^\d+-\d+$/.test(canonical.searchParams.get('range') || '')) canonical.searchParams.delete('range');
     resources.set(canonical.href, {...resource, url: canonical.href});
@@ -77,10 +79,34 @@ async function screenshotOwnedTab(tabId, preview) {
 }
 async function runBrowserJob(config, job) {
   let tabId;
+  let owned = false;
+  let session;
   bridgeRunning = {id: job.id, cancelled: false};
   try {
-    // Only this new background tab is touched. It uses the user's browser profile.
+    // Read an already-working page first. Do not reload, mute, play or close it.
+    const key = value => {
+      try {
+        const url=new URL(value),video=url.pathname.match(/\/video\/(BV[\w]+)/i);
+        if (/(^|\.)bilibili\.com$/.test(url.hostname) && video) return 'bilibili:'+video[1]+':'+(url.searchParams.get('p') || '1');
+        url.hash='';return url.href;
+      }catch(_){return '';}
+    };
+    const existing=(await chrome.tabs.query({})).filter(tab=>tab.url && key(tab.url)===key(job.url));
+    existing.sort((a,b)=>Number(b.active)-Number(a.active));
+    for (const tab of existing) {
+      try {
+        const data=await readTab(tab.id,false);
+        if (!data?.preview?.title || data.error) continue;
+        await inlineCover(data.preview);
+        const candidates=selectResources((await state())[tab.id]?.resources || [],data.candidates || []);
+        if (bridgeRunning.cancelled) throw new Error('任务已取消。');
+        await bridgePost(config,'/api/browser/result',{id:job.id,client_id:config.client_id,source:data.preview.url,preview:data.preview,candidates});
+        await chrome.storage.local.set({bridgeLastError:''});return;
+      } catch(error) { if (bridgeRunning.cancelled) throw error; }
+    }
+    // Otherwise create a tab using the same profile; only this tab is owned.
     const tab = await chrome.tabs.create({url: 'about:blank', active: false}); tabId = tab.id;
+    owned = true;
     await chrome.storage.session.set({bridgeOwnedTab: tabId});
     await serialized(async () => {
       const tabs = await state(); tabs[tabId] = {started: Date.now(), source: job.url, resources: []};
@@ -94,6 +120,7 @@ async function runBrowserJob(config, job) {
       const tab = await chrome.tabs.get(tabId);
       if (tab.status !== 'complete') continue;
       data = await readTab(tabId, true);
+      session=(await state())[tabId]?.pageHeaders;
       if (data?.error) throw new Error(data.error);
       const captured = (await state())[tabId]?.resources || [];
       if (data?.preview?.title && (captured.length || data.candidates.length || Date.now() - started > 8000)) {
@@ -114,12 +141,15 @@ async function runBrowserJob(config, job) {
       source: data.preview.url, preview: data.preview, candidates});
     await chrome.storage.local.set({bridgeLastError: ''});
   } catch (error) {
-    await bridgePost(config, '/api/browser/result', {id: job.id, client_id: config.client_id, error: error.message}).catch(() => {});
+    try {
+      if (await chrome.permissions.contains({permissions:['cookies']})) session={cookies:await chrome.cookies.getAll({url:job.url}),headers:session || {}};
+    } catch(_) {}
+    if (!bridgeRunning?.cancelled) await bridgePost(config, '/api/browser/result', {id: job.id, client_id: config.client_id, error: error.message, session}).catch(() => {});
     if (!bridgeRunning?.cancelled) {
       await chrome.storage.local.set({bridgeLastError: error.message});
     }
   } finally {
-    if (tabId !== undefined) {
+    if (owned && tabId !== undefined) {
       await serialized(async () => { const tabs = await state(); delete tabs[tabId]; await chrome.storage.session.set({captureState: tabs}); });
       await chrome.tabs.remove(tabId).catch(() => {});
       await chrome.storage.session.remove('bridgeOwnedTab');

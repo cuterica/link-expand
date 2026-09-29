@@ -18,7 +18,7 @@ async function refresh() {
 $('auto-enable').onclick = async () => {
   try {
     const screenshots = $('auto-screenshot').checked;
-    const granted = await chrome.permissions.request({origins: ['http://*/*', 'https://*/*'], permissions: screenshots ? ['debugger'] : []});
+    const granted = await chrome.permissions.request({origins: ['http://*/*', 'https://*/*'], permissions: screenshots ? ['cookies', 'debugger'] : ['cookies']});
     if (!granted) throw new Error('需要网站读取权限，才能自动读取你在软件提交的网页和媒体。');
     const result = await chrome.runtime.sendMessage({action: 'bridge-config', enabled: true, base: $('base').value, token: $('token').value, screenshots});
     if (result?.error) throw new Error(result.error);

@@ -31,6 +31,7 @@ def main():
     command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--windowed','--name','LinkExpand',
              '--target-architecture',arch,'--osx-bundle-identifier','com.cuterica.linkexpand','--collect-all','playwright',
              '--collect-data','certifi','--add-data',f'{stage/"linkexpand"/"static"}:linkexpand/static',
+             '--add-data',f'{ROOT/"browser-extension"}:browser-extension',
              '--add-data',f'{licenses}:licenses','--paths',str(stage),'--distpath',str(work/'dist'),
              '--workpath',str(work/'pyinstaller'),'--specpath',str(work),str(stage/'entrypoint.py')]
     subprocess.run(command,cwd=stage,check=True)
@@ -52,6 +53,8 @@ def main():
         f'Link Expand {version} · macOS {arch}\n\n'
         '解压 ZIP，双击 LinkExpand.app；也可以将它拖到应用程序文件夹。无需 Python。\n'
         '使用原有本地网页界面；启动窗口可以重新打开界面、打开下载文件夹或退出。\n'
+        'B 站常规读取失败可用第三方公开 BV 链接解析；界面可关闭，只发送标准链接。\n'
+        '仍失败时自动用 Playwright 打开真实 Chrome；不安装 Edge。\n'
         '未做 Apple 商业签名与公证。首次启动如被拦截，请到系统设置 → 隐私与安全性 → 仍要打开。\n'
         '链接展开、选图、截图与图文复制；通用文件、视频、HLS/DASH 点播下载，最多 500 MB。\n'
         '截图优先使用已安装的 Chrome；没有时可在启动窗口安装独立截图组件。\n'
@@ -62,7 +65,7 @@ def main():
         '附带 Chrome 联动扩展；按 browser-extension/README.md 安装配对一次，启用自动联动。\n'
         '软件输入链接后自动读取已登录浏览器的预览与媒体；配对码跨重启保留。\n'
         '无封面时可授予调试权限截取自己的后台标签页，不切换前台页面。\n'
-        'Cookie/Authorization 不保存；需要登录的任务重启后再次展开补充请求头。\n'
+        '下载任务不保存 Cookie/Authorization；独立回退浏览器可能保存本机登录状态。\n'
         '退出会暂停下载；截图与识别使用临时会话，关闭程序会清理自己的测试浏览器进程。\n'
         '项目与更新：https://github.com/cuterica/link-expand\n',encoding='utf-8')
     archive=output/(name+'.zip');archive.unlink(missing_ok=True)

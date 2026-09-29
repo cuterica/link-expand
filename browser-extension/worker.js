@@ -13,11 +13,19 @@ async function watched(tabId) {
 }
 chrome.webRequest.onBeforeSendHeaders.addListener(details => {
   if (details.method !== 'GET' || details.tabId < 0) return;
-  const ready = watched(details.tabId).then(enabled => {
+  const ready = watched(details.tabId).then(async enabled => {
     if (!enabled) return;
     const headers = {};
     for (const header of details.requestHeaders || []) {
       if (['referer', 'origin', 'user-agent', 'cookie', 'authorization'].includes(header.name.toLowerCase())) headers[header.name] = header.value || '';
+    }
+    if (details.type === 'main_frame') {
+      await serialized(async () => {
+        const tabs=await state(),tab=tabs[details.tabId];
+        if (tab && new URL(details.url).origin === new URL(tab.source).origin) {
+          tab.pageHeaders=headers;await chrome.storage.session.set({captureState:tabs});
+        }
+      });
     }
     return headers;
   });

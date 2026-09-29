@@ -12,6 +12,9 @@ if __name__ == "__main__":
         capture_main()
     elif sys.argv[1:] == ['--media-scan-worker']:
         scan_main()
+    elif sys.argv[1:] == ['--real-browser-worker']:
+        from linkexpand.browser_real import main
+        main()
     elif sys.argv[1:] == ['--browser-install-worker']:
         from linkexpand.setup_browser import main
         main()

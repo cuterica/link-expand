@@ -1,5 +1,5 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="popup.css"><script src="popup.js" defer></script><title>Link Expand</title></head><body>
-<h1>Link Expand · 浏览器联动</h1><p>配对一次后，在软件输入链接，自动使用此浏览器的登录会话读取预览和媒体。后台标签页读取后自动关闭。</p>
+<h1>Link Expand · 浏览器联动</h1><p>配对一次后，在软件输入链接，优先读取已正常打开的同一页面。失败时用可见的真实浏览器回退；只将此网站的登录 Cookie 交给本机回退窗口。</p>
 <label>本地软件地址<input id="base" value="http://127.0.0.1:8765"></label>
 <label>配对码<input id="token" type="password" placeholder="在 Link Expand 点击“复制扩展配对码”"></label>
 <label><input id="auto-screenshot" type="checkbox" checked>没有可用图片时自动截图（授予调试权限；仅截取软件创建的标签页）</label>

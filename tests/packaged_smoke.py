@@ -100,7 +100,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
-    parser.add_argument('--expected-version',default='0.3.3')
+    parser.add_argument('--expected-version',default='0.3.4')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:
@@ -207,6 +207,12 @@ def main():
                 assert result['status']=='complete' and result['result']['preview']['title']=='Automatic browser preview'
                 assert result['result']['catalog']['resources'][0]['kind']=='pair'
                 print('PASS: packaged automatic browser jobs, persistent pairing key, video/audio pair, private headers remain local',flush=True)
+                bili=post('/api/preview',{'url':browser_url,'bili_parser':True})
+                assert 'iPhone 18' in bili['title'],bili.get('title')
+                assert bili['summary_source']=='B 站公开链接解析'
+                assert bili['cover'] and bili['catalog']['resources']
+                with urllib.request.urlopen(base+bili['cover'],timeout=10) as response:assert response.read(8)==b'\x89PNG\r\n\x1a\n'
+                print('PASS: actual Bilibili URL, public parser fallback, title/summary/cover and complete-video catalog',flush=True)
                 x_preview = post('/api/preview', {'url':'https://x.com/TwitterDev/status/1460323737035677698'})
                 assert x_preview['videos']
                 job = post('/api/video/start', {'id':x_preview['id'],'video_index':x_preview['selected_video']})

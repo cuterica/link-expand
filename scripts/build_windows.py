@@ -83,6 +83,7 @@ def main():
                "--console", "--name", name, "--collect-all", "playwright",
                "--exclude-module", "tkinter",
                "--add-data", f"{stage / 'linkexpand' / 'static'};linkexpand/static",
+               "--add-data", f"{ROOT / 'browser-extension'};browser-extension",
                "--add-data", f"{notice_dir};licenses", "--version-file", str(version_file),
                "--paths", str(stage), "--distpath", str(work / "dist"),
                "--workpath", str(work / "pyinstaller"), "--specpath", str(work),
@@ -97,6 +98,8 @@ def main():
         f"Link Expand {version} · Windows x64 免安装版\n\n"
         "双击 EXE，会自动打开现有的本地网页界面。无需安装 Python。\n"
         "将 URL 粘贴到输入框，即可自动展开摘要、图片或截图。\n"
+        "B 站常规读取失败可用第三方公开 BV 链接解析；界面可关闭，只发送标准链接。\n"
+        "仍失败时自动用 Playwright 打开真实浏览器；独立窗口不保证解除 412。\n"
         "通用下载支持普通文件、视频/音频、网页资源、HLS/DASH 点播。\n"
         "支持 1–16 连接、限速、失败重试、暂停续传与任务保存；每个任务最多 500 MB。\n"
         "完整文件保存到系统下载文件夹的 LinkExpand-videos；完成后可复制文件。\n"

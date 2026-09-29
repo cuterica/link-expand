@@ -23,13 +23,14 @@ def main():
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         with patch('linkexpand.server.get_preview',side_effect=PreviewError('B 站安全风控拦截（HTTP 412）')), \
+             patch.object(app,'real_browser',side_effect=PreviewError('真实浏览器仍返回 HTTP 412')), \
              patch('linkexpand.metadata.fetch_resource',side_effect=fetch),sync_playwright() as runtime:
             browser=runtime.chromium.launch(executable_path=browser_executable(),headless=True)
             try:
                 context=browser.new_context();page=context.new_page();errors=[]
                 page.on('pageerror',lambda error:errors.append(str(error)))
                 base=f'http://127.0.0.1:{server.server_port}'
-                page.goto(base);page.locator('#url-input').fill(url)
+                page.goto(base);page.locator('#bili-parser').uncheck();page.locator('#url-input').fill(url)
                 expect(page.locator('#feedback')).to_contain_text('HTTP 412')
                 response=context.request.post(base+'/api/capture/import',headers={'X-Local-Token':app.token,'Origin':'chrome-extension://'+'a'*32},
                     data={'source':url,'candidates':[], 'preview':{'url':url,'title':'Edge 已登录的视频标题','description':'已打开页面的摘要','image_url':picture}})

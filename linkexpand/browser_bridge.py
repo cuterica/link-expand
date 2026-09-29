@@ -42,7 +42,7 @@ class BrowserBridge:
         now = self.clock()
         self.clients = {key: value for key, value in self.clients.items() if now - value['seen'] < 40}
         for job in self.jobs.values():
-            if job['status'] in {'queued', 'running'} and now - job['created'] > 65:
+            if job['status'] in {'queued', 'running', 'fallback'} and now - job['created'] > (110 if job['status']=='fallback' else 65):
                 job.update(status='error', error='浏览器读取超时，请确认浏览器仍在运行，或在网页中完成验证后重试。')
 
     def status(self):
@@ -50,18 +50,18 @@ class BrowserBridge:
             self._expire()
             return {'connected': bool(self.clients), 'browsers': sorted({v['browser'] for v in self.clients.values()})}
 
-    def request(self, url):
+    def request(self, url, use_parser=True):
         url = normalize_url(url)
         with self.lock:
             self._expire()
             if not self.clients:
                 raise PreviewError('浏览器未连接。请在 Edge / Chrome 扩展中完成一次配对并启用自动联动。')
-            if sum(j['status'] in {'queued', 'running'} for j in self.jobs.values()) >= 4:
+            if sum(j['status'] in {'queued', 'running', 'fallback'} for j in self.jobs.values()) >= 4:
                 raise PreviewError('浏览器正在处理其他链接，请稍后重试。')
             key = secrets.token_hex(12)
-            self.jobs[key] = {'id': key, 'url': url, 'status': 'queued', 'created': self.clock(), 'client': None}
+            self.jobs[key] = {'id': key, 'url': url, 'status': 'queued', 'created': self.clock(), 'client': None,'use_parser':bool(use_parser)}
             while len(self.jobs) > 32:
-                terminal = next((k for k, j in self.jobs.items() if j['status'] not in {'queued', 'running'}), None)
+                terminal = next((k for k, j in self.jobs.items() if j['status'] not in {'queued', 'running', 'fallback'}), None)
                 if terminal is None: break
                 del self.jobs[terminal]
             return self.get(key)
@@ -99,7 +99,13 @@ class BrowserBridge:
         with self.lock:
             self._expire()
             job = self.jobs.get(key)
-            return bool(job and job['client'] == client and job['status'] == 'running')
+            return bool(job and job['client'] == client and job['status'] in {'running','fallback'})
+
+    def fallback(self,key,client):
+        with self.lock:
+            if not self.accepts(key,client) or self.jobs[key]['status']=='fallback':return None
+            self.jobs[key].update(status='fallback',created=self.clock())
+            return self.jobs[key]['url']
 
     def finish(self, key, client, result=None, error=None):
         with self.lock:
@@ -110,5 +116,5 @@ class BrowserBridge:
     def cancel(self, key):
         with self.lock:
             job = self.jobs.get(key)
-            if job and job['status'] in {'queued', 'running'}: job['status'] = 'cancelled'
+            if job and job['status'] in {'queued', 'running','fallback'}: job['status'] = 'cancelled'
             return {'ok': True}
