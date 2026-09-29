@@ -281,9 +281,22 @@ function displayVideoChoices(preview) {
   choices.disabled = !videos.length;
   $('video-download').disabled = !videos.length || !clipboardReady;
   $('video-hint').textContent = videos.length
-    ? `识别到 ${videos.length} 个视频。多连接下载，可暂停续传；优先选择 500 MB 内的最高可用画质。`
+    ? `识别到 ${videos.length} 个视频。多连接下载，可暂停续传；按所选大小上限自动选择最佳可用画质。`
     : '也可以在下方输入文件、视频或网页地址，识别通用下载资源。';
 }
+
+function downloadMaxBytes() {
+  return $('download-max-bytes').value === 'unlimited' ? null : 500_000_000;
+}
+function updateDownloadLimit() {
+  $('download-limit-badge').textContent = downloadMaxBytes() === null ? '无限制 · 最高画质' : '≤ 500 MB';
+}
+try { if (localStorage.getItem('linkexpand-download-limit') === 'unlimited') $('download-max-bytes').value = 'unlimited'; } catch (_) {}
+updateDownloadLimit();
+$('download-max-bytes').addEventListener('change', () => {
+  updateDownloadLimit();
+  try { localStorage.setItem('linkexpand-download-limit', $('download-max-bytes').value); } catch (_) {}
+});
 
 function videoError(message) {
   $('video-feedback').textContent = message;
@@ -295,6 +308,11 @@ function sizeText(bytes) {
 }
 
 function displayVideoJob(job) {
+  if (videoJobId !== job.id && Object.hasOwn(job, 'max_bytes')) {
+    $('download-max-bytes').value = job.max_bytes === null ? 'unlimited' : '500000000';
+    updateDownloadLimit();
+    try { localStorage.setItem('linkexpand-download-limit', $('download-max-bytes').value); } catch (_) {}
+  }
   videoJob = job;
   videoJobId = job.id;
   try { localStorage.setItem('linkexpand-video-job', job.id); } catch (_) {}
@@ -307,7 +325,7 @@ function displayVideoJob(job) {
   if (job.progress == null) $('video-progress').removeAttribute('value');
   else $('video-progress').value = job.progress;
   $('video-detail').textContent = [job.quality, `${sizeText(job.downloaded)} / ${job.total ? sizeText(job.total) : '大小未知'}`,
-    job.speed ? `${sizeText(job.speed)}/秒` : '',job.fragments ? `${job.fragments} 个分段已保存` : ''].filter(Boolean).join(' · ');
+    job.speed ? `${sizeText(job.speed)}/秒` : '',job.fragments ? `${job.fragments} 个分段已保存` : '', job.max_bytes === null ? '无限制' : '500 MB 上限'].filter(Boolean).join(' · ');
   $('video-pause').hidden = !['queued', 'resolving', 'downloading'].includes(job.status);
   $('video-resume').hidden = !['paused', 'error'].includes(job.status);
   $('video-resume').textContent = job.resumable || job.fragments ? '继续下载' : '重新下载';
@@ -357,9 +375,9 @@ $('video-download').addEventListener('click', async () => {
   try {
     const job=downloadCatalog
       ? await api('/api/download/start',{catalog_id:downloadCatalog.id,index:Number($('video-choice').value),
-          connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000})
+          max_bytes:downloadMaxBytes(),connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000})
       : await api('/api/video/start', {id: current.id, video_index: Number($('video-choice').value),
-          connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000});
+          max_bytes:downloadMaxBytes(),connections:Number($('download-connections').value),speed_limit:Number($('download-speed').value)*1000});
     displayVideoJob(job);refreshQueue();
   }
   catch (error) { videoError(error.message); }
@@ -371,7 +389,7 @@ for (const action of ['pause', 'resume', 'cancel']) {
     if (!videoJobId) return;
     const button = $('video-' + action);
     button.disabled = true;
-    try { displayVideoJob(await api('/api/video/' + action, {job_id: videoJobId})); }
+    try { displayVideoJob(await api('/api/video/' + action, {job_id: videoJobId, ...(action === 'resume' ? {max_bytes:downloadMaxBytes()} : {})})); }
     catch (error) { videoError(error.message); }
     finally { button.disabled = false; }
   });

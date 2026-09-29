@@ -49,7 +49,7 @@ class UI:
 def main():
     if sys.platform!='darwin':raise RuntimeError('Run on the actual Mac.')
     parser=argparse.ArgumentParser();parser.add_argument('--app',type=Path);parser.add_argument('--port',type=int)
-    parser.add_argument('--skip-video',action='store_true');parser.add_argument('--restart',action='store_true');parser.add_argument('--launch-services',action='store_true');args=parser.parse_args()
+    parser.add_argument('--skip-video',action='store_true');parser.add_argument('--restart',action='store_true');parser.add_argument('--launch-services',action='store_true');parser.add_argument('--unlimited',action='store_true');args=parser.parse_args()
     folder=Path.home()/'Library/Application Support/LinkExpand/mac-chain-qa';folder.mkdir(exist_ok=True)
     with socket.socket() as reserved:reserved.bind(('127.0.0.1',0));port=args.port or reserved.getsockname()[1]
     base=f'http://127.0.0.1:{port}';process=None;log=None
@@ -82,6 +82,10 @@ def main():
         ui.wait("!!document.getElementById('url-input')",True)
         ui.wait("!document.getElementById('native-quit').hidden",True)
         print('PASS: native application window loaded the actual interface, no Python on PATH for packaged run.',flush=True)
+        if args.unlimited:
+            ui.eval("(()=>{const select=document.getElementById('download-max-bytes');select.value='unlimited';select.dispatchEvent(new Event('change'));return true;})()")
+            ui.wait("document.getElementById('download-limit-badge').textContent",lambda value:'无限制' in value)
+            print('PASS: native unlimited selector and highest-quality badge.',flush=True)
         target='https://www.bilibili.com/video/BV1cSec6tEux/'
         with cocoa.pool():cocoa.set_payloads([('public.utf8-plain-text',target.encode())])
         ui.eval("(()=>{document.getElementById('url-input').focus();return true;})()")
@@ -123,6 +127,7 @@ def main():
                     ui.wait("document.readyState",'complete')
                     ui.wait("!!document.getElementById('video-status')",True)
                     ui.wait("document.getElementById('video-status').textContent",'已暂停',timeout=35)
+                    if args.unlimited:ui.wait("document.getElementById('download-max-bytes').value",'unlimited')
                     print('PASS: quit and reopen native app restores paused real video task in the interface.',flush=True)
                     ui.eval("(()=>{document.getElementById('download-speed').value='0';return true;})()")
                 ui.click('video-resume')

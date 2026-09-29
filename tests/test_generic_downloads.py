@@ -10,6 +10,16 @@ from linkexpand.metadata import PreviewError
 from linkexpand.streaming import hls_media,hls_variants,dash_plan,substitute
 
 class GenericTests(unittest.TestCase):
+    def test_hls_prefers_resolution_over_bandwidth(self):
+        playlist='#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=9000000,RESOLUTION=1280x720\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=3840x2160\nhigh.m3u8\n'
+        variants=hls_variants(playlist,'https://example.com/master.m3u8')
+        self.assertEqual(variants[0]['quality'],'3840x2160')
+
+    def test_dash_prefers_largest_representation_across_adaptations(self):
+        xml='<MPD mediaPresentationDuration="PT4S"><Period><AdaptationSet mimeType="video/mp4"><Representation id="low" width="1280" height="720" bandwidth="9000000"><BaseURL>low.mp4</BaseURL><SegmentBase/></Representation></AdaptationSet><AdaptationSet mimeType="video/mp4"><Representation id="high" width="3840" height="2160" bandwidth="2000000"><BaseURL>high.mp4</BaseURL><SegmentBase/></Representation></AdaptationSet></Period></MPD>'
+        plan=dash_plan('https://example.com/a.mpd',_content=('https://example.com/a.mpd',xml))
+        self.assertEqual(plan['quality'],'3840×2160')
+        self.assertEqual(plan['tracks'][0]['segments'][0]['url'],'https://example.com/high.mp4')
     def test_public_nonstandard_ports_and_url_validation(self):
         self.assertEqual(resource_url('https://example.com:8443/中文'), 'https://example.com:8443/%E4%B8%AD%E6%96%87')
         for value in ['file:///etc/passwd','https://user:pass@example.com','https://example.com:70000/','https://example.com/a\r\nX:x']:

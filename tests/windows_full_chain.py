@@ -68,7 +68,7 @@ def wait_backend(base,process):
 def main():
     if os.name!='nt':raise RuntimeError('Run this acceptance test with Windows Python')
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8')
-    parser=argparse.ArgumentParser();parser.add_argument('executable',type=Path);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('executable',type=Path);parser.add_argument('--expected-version',default='0.3.61');parser.add_argument('--unlimited',action='store_true');args=parser.parse_args()
     root=Path(__file__).resolve().parents[1]/'artifacts/windows-full-chain';root.mkdir(exist_ok=True)
     folder=Path(tempfile.mkdtemp(prefix='linkexpand-windows-chain-'));storage=folder/'downloads'
     with socket.socket() as reserved:reserved.bind(('127.0.0.1',0));port=reserved.getsockname()[1]
@@ -81,7 +81,7 @@ def main():
     try:
         def launch():return subprocess.Popen(command,stdout=log,stderr=log,env=environment,creationflags=subprocess.CREATE_NEW_CONSOLE)
         process=launch();health=wait_backend(base,process)
-        assert health['version']=='0.3.6',health
+        assert health['version']==args.expected_version,health
         print('PASS: actual Windows portable EXE starts without Python on PATH.',flush=True)
         browser_path=Path(os.environ['LOCALAPPDATA'])/'ms-playwright/chromium-1228/chrome-win64/chrome.exe'
         with sync_playwright() as runtime:
@@ -90,6 +90,11 @@ def main():
                 context=browser.new_context(viewport={'width':1440,'height':1080},permissions=['clipboard-read','clipboard-write'],accept_downloads=True)
                 errors=[];page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
                 page.goto(base);expect(page.locator('#copy-text')).to_be_disabled()
+                if args.unlimited:
+                    page.locator('#download-max-bytes').select_option('unlimited')
+                    expect(page.locator('#download-limit-badge')).to_contain_text('无限制')
+                    page.reload();expect(page.locator('#download-max-bytes')).to_have_value('unlimited')
+                    print('PASS: actual unlimited selection and page reload preserve the download setting.',flush=True)
                 target='https://www.bilibili.com/video/BV1cSec6tEux/'
                 set_formats([(13,(target+'\0').encode('utf-16-le'))]);backup.changed_by_test()
                 page.locator('#url-input').click();page.keyboard.press('Control+V')
@@ -139,7 +144,9 @@ def main():
                 print('PASS: actual Ctrl-C closes only own app console.',flush=True)
                 process=launch();wait_backend(base,process);page.reload()
                 expect(page.locator('#video-status')).to_have_text('已暂停',timeout=30000)
+                if args.unlimited:expect(page.locator('#download-max-bytes')).to_have_value('unlimited')
                 page.locator('#video-resume').click();expect(page.locator('#video-status')).to_have_text('下载完成',timeout=300000)
+                if args.unlimited:assert page.evaluate('videoJob.max_bytes') is None
                 path=Path(page.locator('#video-path').inner_text().removeprefix('已保存到：'))
                 assert path.is_file() and path.stat().st_size==140922591
                 digest=hashlib.sha256(path.read_bytes()).hexdigest();assert digest=='ecfcbb24a8b74f699bdbec3a5906fd36b38fd21de99de81dbf4d46a8ec6b9d6c'

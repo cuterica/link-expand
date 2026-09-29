@@ -373,8 +373,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise PreviewError('视频尚未下载完成。')
                 with job.file.open('rb') as video:
                     size = os.fstat(video.fileno()).st_size
-                    if not 0 < size <= MAX_VIDEO_BYTES:
-                        raise PreviewError('视频超过 500 MB。')
+                    if size <= 0:
+                        raise PreviewError('下载文件为空。')
                     self.send_response(200)
                     self.send_header('Content-Type', mimetypes.guess_type(job.filename)[0] or 'application/octet-stream')
                     self.send_header('Content-Length', str(size))
@@ -496,7 +496,10 @@ class Handler(BaseHTTPRequestHandler):
                 connections=data.get('connections',4);speed=data.get('speed_limit',0)
                 if not isinstance(connections,int) or not 1<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
                     raise PreviewError('连接数或限速参数无效。')
-                video['options']={'connections':connections,'speed_limit':speed}
+                max_bytes=data.get('max_bytes',MAX_VIDEO_BYTES)
+                if max_bytes is not None and (type(max_bytes) is not int or max_bytes!=MAX_VIDEO_BYTES):
+                    raise PreviewError('下载大小请选择 500 MB 或无限制。')
+                video['options']={'connections':connections,'speed_limit':speed,'max_bytes':max_bytes}
                 result = app.downloads.start(video, preview.url)
             elif path=='/api/download/resolve':
                 from .media_resolver import resolve
@@ -534,7 +537,10 @@ class Handler(BaseHTTPRequestHandler):
                 connections=data.get('connections',4);speed=data.get('speed_limit',0)
                 if not isinstance(connections,int) or not 1<=connections<=16 or not isinstance(speed,int) or not 0<=speed<=100_000_000:
                     raise PreviewError('连接数或限速参数无效。')
-                item['options']={'connections':connections,'speed_limit':speed}
+                max_bytes=data.get('max_bytes',MAX_VIDEO_BYTES)
+                if max_bytes is not None and (type(max_bytes) is not int or max_bytes!=MAX_VIDEO_BYTES):
+                    raise PreviewError('下载大小请选择 500 MB 或无限制。')
+                item['options']={'connections':connections,'speed_limit':speed,'max_bytes':max_bytes}
                 result=app.downloads.start(item,catalog['source'])
             elif path=='/api/download/catalog':
                 key=str(data.get('id',''));catalog=app.get_catalog(key)
@@ -545,6 +551,14 @@ class Handler(BaseHTTPRequestHandler):
             elif path in {'/api/video/pause', '/api/video/resume', '/api/video/cancel', '/api/video/copy'}:
                 job = app.downloads.get(str(data.get('job_id', '')))
                 if path.endswith('/resume'):
+                    if 'max_bytes' in data:
+                        max_bytes=data['max_bytes']
+                        if max_bytes is not None and (type(max_bytes) is not int or max_bytes!=MAX_VIDEO_BYTES):
+                            raise PreviewError('下载大小请选择 500 MB 或无限制。')
+                        with job.lock:
+                            if job.thread and job.thread.is_alive():raise PreviewError('请等待任务暂停后再修改下载大小。')
+                            job.limit=max_bytes
+                            job.save()
                     job.launch()
                 elif path.endswith('/copy'):
                     if job.status != 'complete' or not job.valid_file():

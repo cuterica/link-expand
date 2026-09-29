@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Link Expand Media Capture",
-  "version": "0.3.6",
+  "version": "0.3.61",
   "minimum_chrome_version": "120",
   "description": "Use your paired browser to automatically preview links and identify downloadable media in local Link Expand.",
   "permissions": ["storage", "activeTab", "webRequest", "scripting", "tabs", "alarms"],

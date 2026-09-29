@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 
 from .download_http import resource_url,document_body
 from .metadata import PreviewError
+from .quality import quality_rank
 
 MAX_ITEMS=10000
 
@@ -109,10 +110,10 @@ def hls_variants(text,url):
                 bandwidth=int(attrs.get('AVERAGE-BANDWIDTH') or attrs.get('BANDWIDTH') or 0)
                 variants.append({'url':resource_url(urljoin(url,following)),'kind':'hls','bandwidth':bandwidth,
                                  'quality':attrs.get('RESOLUTION') or (f'{bandwidth//1000} kbps' if bandwidth else 'HLS'),
-                                 'audio_group':attrs.get('AUDIO')})
+                                 'frame_rate':attrs.get('FRAME-RATE'), 'audio_group':attrs.get('AUDIO')})
     for variant in variants:
         if variant['audio_group'] in renditions:variant['audio_url']=renditions[variant['audio_group']]['url']
-    return sorted(variants,key=lambda item:item['bandwidth'],reverse=True)
+    return sorted(variants,key=quality_rank,reverse=True)
 
 
 def hls_plan(url,headers=None,credential_origin=None,depth=0):
@@ -215,13 +216,14 @@ def dash_plan(url,headers=None,credential_origin=None,video_id=None,_content=Non
         return {'kind':'dash','tracks':list(grouped.values()),'quality':quality,'bandwidth':bandwidth}
     period=periods[0];duration=duration_seconds(period.get('duration') or root.get('mediaPresentationDuration'))
     base=with_base(period,with_base(root,final));tracks=[];quality=[];bandwidth=0
-    for adaptation in children(period,'AdaptationSet'):
+    for adaptation in sorted(children(period,'AdaptationSet'),key=lambda node:max((quality_rank(dict(node.attrib,**item.attrib)) for item in children(node,'Representation')),default=(0,0,0,0)),reverse=True):
         representations=children(adaptation,'Representation')
         mime=adaptation.get('mimeType') or next((item.get('mimeType') for item in representations if item.get('mimeType')),'')
         kind=adaptation.get('contentType') or ('audio' if 'audio' in mime else 'video' if 'video' in mime else '')
         if kind not in {'video','audio'}:continue
         if any(track['kind']==kind for track in tracks):continue
-        reps=sorted(children(adaptation,'Representation'),key=lambda item:int(item.get('bandwidth','0')),reverse=True)
+        reps=sorted(children(adaptation,'Representation'),key=lambda item:quality_rank(dict(adaptation.attrib,**item.attrib)),reverse=True)
+        if kind=='video' and video_id and not any(item.get('id')==video_id for item in reps):continue
         selected=next((item for item in reps if not children(item,'ContentProtection') and not children(adaptation,'ContentProtection')
                        and (kind!='video' or not video_id or item.get('id')==video_id)),None)
         if selected is None:raise PreviewError('DASH 音视频含播放保护，不能通用下载。')
@@ -258,7 +260,7 @@ def dash_plan(url,headers=None,credential_origin=None,video_id=None,_content=Non
                            'duration':span,'init':initialization,'key':None,'sequence':index,'discontinuity':False} for index,item in enumerate(entries)]
         tracks.append({'kind':kind,'segments':segments,'duration':sum(item['duration'] for item in segments)})
         bandwidth+=int(selected.get('bandwidth','0'))
-        if kind=='video':quality.append(f'{selected.get("width","?")}×{selected.get("height","?")}')
+        if kind=='video':quality.append(f'{selected.get("width",adaptation.get("width","?"))}×{selected.get("height",adaptation.get("height","?"))}')
         # One video and one default audio track are enough for the chosen presentation.
         if len(tracks)>=2 and {item['kind'] for item in tracks}>={'video','audio'}:break
     if not tracks:raise PreviewError('DASH 清单没有可处理的音视频轨。')
@@ -285,6 +287,14 @@ def resource_key(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()[:24]
 
 
+def segment_digest(path, job):
+    digest=hashlib.sha256()
+    with path.open('rb') as source:
+        while chunk:=source.read(1024*1024):
+            job.check_stop();digest.update(chunk)
+    return digest.hexdigest()
+
+
 def stream_download(job,variant):
     from .video_downloads import open_video,DownloadStopped,RetryableHTTP
     executable=ffmpeg_path()
@@ -292,7 +302,7 @@ def stream_download(job,variant):
     headers=job.request_headers(variant);scope=job.video.get('credential_origin') or job.source
     plan=stream_plan(variant,headers,scope)
     estimate=max(track['duration'] for track in plan['tracks'])*plan.get('bandwidth',0)/8
-    if estimate>job.manager.limit*1.15:raise PreviewError('这个清晰度预计超过 500 MB，请选择更低清晰度。')
+    if job.limit is not None and estimate>job.limit*1.15:raise PreviewError('这个清晰度预计超过 500 MB，请选择更低清晰度。')
     folder=job.manager.storage/(job.id+'-segments')
     if folder.is_symlink():raise PreviewError('下载分段文件夹不能是符号链接。')
     folder.mkdir(exist_ok=True)
@@ -316,7 +326,7 @@ def stream_download(job,variant):
     completed=job.stream_state['completed']
     for name in list(completed):
         path=folder/name
-        if name not in resources or path.is_symlink() or not path.is_file() or path.stat().st_size!=completed[name]['size'] or hashlib.sha256(path.read_bytes()).hexdigest()!=completed[name]['sha256']:
+        if name not in resources or path.is_symlink() or not path.is_file() or path.stat().st_size!=completed[name]['size'] or segment_digest(path,job)!=completed[name]['sha256']:
             completed.pop(name,None)
     job.downloaded=sum(value['size'] for value in completed.values());job.asset={'url':variant['url'],'size':None,'range':False,'validator':'segments'}
     job.quality=variant.get('quality') or plan['quality'];job.status='downloading';job.save()
@@ -342,7 +352,7 @@ def stream_download(job,variant):
                         job.throttle(len(chunk))
                         with job.lock:
                             total=sum(record['size'] for record in completed.values())+sum(live.values())+len(chunk)
-                            if total>job.manager.limit:raise PreviewError('分段资源合计超过 500 MB，已停止下载。')
+                            if job.exceeds_limit(total):raise PreviewError('分段资源合计超过 500 MB，已停止下载。')
                             live[name]+=len(chunk);job.downloaded=total
                         output.write(chunk);digest.update(chunk);size+=len(chunk)
                     output.flush();os.fsync(output.fileno())
@@ -409,14 +419,14 @@ def stream_download(job,variant):
             deadline=time.monotonic()+180
             while process.poll() is None:
                 job.check_stop()
-                if output.exists() and output.stat().st_size>job.manager.limit:raise PreviewError('合并后的视频超过 500 MB，已停止保存。')
+                if output.exists() and job.exceeds_limit(output.stat().st_size):raise PreviewError('合并后的视频超过 500 MB，已停止保存。')
                 if time.monotonic()>deadline:raise PreviewError('媒体合并超时，请检查 FFmpeg 或选择其他资源。')
                 job.stop.wait(.1)
             if process.returncode or not output.is_file():
                 errors.flush()
                 reason=error_log.read_text(encoding='utf-8',errors='replace')[-500:]
                 raise PreviewError('流媒体合并失败：'+reason)
-            if not 0<output.stat().st_size<=job.manager.limit:raise PreviewError('合并后的视频超过 500 MB 或为空。')
+            if output.stat().st_size<=0 or job.exceeds_limit(output.stat().st_size):raise PreviewError('合并后的视频超过 500 MB 或为空。')
             output.replace(job.part)
             job.downloaded=job.part.stat().st_size;job.asset['size']=job.downloaded
         finally:

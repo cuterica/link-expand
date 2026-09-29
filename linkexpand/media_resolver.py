@@ -14,6 +14,7 @@ from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlun
 from .download_http import resource_url, checked_headers, scoped_headers, public_headers,document_body
 from .metadata import PreviewError, clean_text
 from .video_downloads import open_video
+from .quality import quality_rank
 
 FILE_EXTENSIONS = {'zip','7z','rar','tar','gz','pdf','exe','msi','iso','dmg','bin','txt','csv','json',
                    'jpg','jpeg','png','gif','webp','mp3','m4a','aac','wav','flac','ogg','mp4','webm','mkv','mov','m4v','avi','ts'}
@@ -192,9 +193,10 @@ def resolve(url, headers=None, scan=False):
                         for representation in children(adaptation,'Representation'):
                             variants.append({'url':source,'kind':'dash','dash_video_id':representation.get('id'),
                                 'bandwidth':int(representation.get('bandwidth','0')),
-                                'quality':f'{representation.get("width","?")}×{representation.get("height","?")}',
+                                'quality':f'{representation.get("width",adaptation.get("width","?"))}×{representation.get("height",adaptation.get("height","?"))}',
+                                'frame_rate':representation.get('frameRate',adaptation.get('frameRate')),
                                 'headers':scoped_headers(headers,source,url)})
-                if variants:resources[0]['variants']=sorted(variants,key=lambda item:item['bandwidth'],reverse=True)
+                if variants:resources[0]['variants']=sorted(variants,key=quality_rank,reverse=True)
             except (ET.ParseError,ValueError):pass
     return {'source':source,'title':title,'resources':resources}
 

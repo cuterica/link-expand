@@ -46,7 +46,8 @@ def run():
                     command+=['-hls_key_info_file',str(info)]
                 command+=['-f','hls','-hls_time','1','-hls_playlist_type','vod','-hls_segment_filename',str(directory/'segment-%03d.ts'),str(directory/'index.m3u8')]
             subprocess.run(command,check=True,timeout=30,cwd=directory)
-        manager=DownloadManager(root/'downloads')
+        unlimited='--unlimited' in sys.argv
+        manager=DownloadManager(root/'downloads',limit=1 if unlimited else 500_000_000)
         # Reuse a real VOD to exercise the extension's separate audio/video merge.
         combined=fixtures/'combined.mp4'
         subprocess.run([ffmpeg,'-loglevel','error','-y','-i',str(fixtures/'hls'/'index.m3u8'),'-c','copy',str(combined)],check=True,timeout=20)
@@ -60,7 +61,9 @@ def run():
                     url=base+'/'+mode+('/manifest.mpd' if mode=='dash' else '/index.m3u8')
                     catalog=imported_candidates(base+'/page',[
                         {'url':base+'/separate.mp4','kind':'video'}, {'url':base+'/separate.m4a','kind':'audio'}]) if mode=='pair' else resolve(url)
+                    if unlimited:catalog['resources'][0]['options']={'max_bytes':None}
                     state=manager.start(catalog['resources'][0],catalog['source']);job=manager.get(state['id'])
+                    if unlimited:assert job.limit is None
                     if mode=='hls':
                         deadline=time.monotonic()+10
                         while not job.stream_state.get('completed') and job.status not in {'complete','error'} and time.monotonic()<deadline:time.sleep(.005)

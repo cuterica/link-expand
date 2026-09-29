@@ -154,6 +154,53 @@ class DownloadTests(unittest.TestCase):
         self.assertFalse(state['resumable'])
         self.assertEqual(job.file.read_bytes(), VIDEO)
 
+    def test_unlimited_ignores_known_and_unknown_size_caps(self):
+        self.manager.limit = 32768
+        for index, name in enumerate(['video', 'single', 'unknown'], 1):
+            video = self.video(name)
+            video.update(index=index, options={'max_bytes':None})
+            job = self.start(video)
+            state = self.wait(job)
+            self.assertEqual(state['status'], 'complete', state)
+            self.assertIsNone(state['max_bytes'])
+            self.assertEqual(job.file.read_bytes(), VIDEO)
+
+    def test_unlimited_prioritizes_largest_frame_over_bitrate(self):
+        video = self.video(variants=[
+            {'url':'http://video.twimg.com/low.mp4', 'quality':'1280×720', 'bitrate':9000000},
+            {'url':'http://video.twimg.com/high.mp4', 'quality':'3840×2160', 'bitrate':2000000}])
+        video['options']={'max_bytes':None}
+        state = self.wait(self.start(video))
+        self.assertEqual(state['status'], 'complete', state)
+        self.assertEqual(state['quality'], '3840×2160')
+
+    def test_unlimited_survives_restart_with_a_smaller_default_cap(self):
+        video = self.video();video['options']={'max_bytes':None}
+        job = self.start(video)
+        deadline=time.monotonic()+5
+        while job.snapshot()['downloaded']<32768 and time.monotonic()<deadline:time.sleep(.005)
+        job.pause();self.wait(job)
+        saved_id=job.id;self.manager.close()
+        self.manager=DownloadManager(self.root,self.root/'state',limit=32768,chunk_size=65536)
+        job=self.manager.get(saved_id)
+        self.assertIsNone(job.limit)
+        job.launch();state=self.wait(job)
+        self.assertEqual(state['status'],'complete',state)
+        self.manager.close()
+        self.manager=DownloadManager(self.root,self.root/'state',limit=32768)
+        restored=self.manager.get(saved_id)
+        self.assertEqual(restored.status,'complete')
+        self.assertTrue(restored.valid_file())
+
+    def test_failed_size_limit_task_can_restart_unlimited(self):
+        self.manager.limit=32768
+        video=self.video('unknown');job=self.start(video)
+        self.assertEqual(self.wait(job)['status'],'error')
+        video['options']={'max_bytes':None}
+        resumed=self.start(video)
+        self.assertEqual(resumed.id,job.id)
+        self.assertEqual(self.wait(resumed)['status'],'complete')
+
     def test_retry_resumes_failed_segment(self):
         job = self.start(self.video('retry'))
         state = self.wait(job)

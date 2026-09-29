@@ -40,8 +40,8 @@ def file_drop_payload(path: Path) -> bytes:
 def copy_video_file(path: Path):
     if os.name != 'nt' and sys.platform != 'darwin':
         raise PreviewError('当前系统请从下载文件夹分享完整文件。')
-    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 500_000_000:
-        raise PreviewError('视频文件不存在或超过 500 MB，请重新下载。')
+    if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0:
+        raise PreviewError('视频文件不存在或为空，请重新下载。')
     with LOCK:
         if sys.platform=='darwin':
             from .macos_clipboard import copy_file

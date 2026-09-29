@@ -21,6 +21,7 @@ from urllib.parse import urljoin, urlsplit
 from .metadata import (PinnedHTTPConnection, PinnedHTTPSConnection, PreviewError,
                        normalize_url, public_addresses, http_error_message)
 from .download_http import resource_url, checked_headers, scoped_headers, public_headers
+from .quality import quality_rank
 
 MAX_VIDEO_BYTES = 500_000_000
 
@@ -129,6 +130,7 @@ class DownloadJob:
         self.selected_variant = None
         self.credentials_missing = False
         options=video.get('options') or {}
+        self.limit = saved.get('max_bytes', options.get('max_bytes', manager.limit)) if saved else options.get('max_bytes', manager.limit)
         self.workers=min(16,max(1,int(options.get('connections',manager.workers))))
         self.speed_limit=max(0,int(options.get('speed_limit',0)))
         self.rate_lock=threading.Lock();self.next_transfer=0.
@@ -154,10 +156,13 @@ class DownloadJob:
         path = self.file
         try:
             return bool(path and not path.is_symlink() and path.is_file()
-                        and 0 < path.stat().st_size <= self.manager.limit
+                        and path.stat().st_size > 0 and not self.exceeds_limit(path.stat().st_size)
                         and path.stat().st_size == self.downloaded)
         except OSError:
             return False
+
+    def exceeds_limit(self, size):
+        return self.limit is not None and size > self.limit
 
     def snapshot(self):
         with self.lock:
@@ -173,7 +178,7 @@ class DownloadJob:
                     'resumable': bool(self.asset and self.asset['range'] and self.asset['validator']),
                     'sha256': self.sha256, 'kind': self.video.get('kind','video'),
                     'fragments': len(self.stream_state.get('completed',{})),
-                    'credentials_missing': self.credentials_missing}
+                    'credentials_missing': self.credentials_missing, 'max_bytes': self.limit}
 
     def save(self):
         with self.lock:
@@ -186,7 +191,8 @@ class DownloadJob:
                     'asset': self.asset, 'positions': self.positions, 'plan': self.plan,
                     'downloaded': sum(self.positions) if self.plan else self.downloaded,
                     'filename': self.filename, 'quality': self.quality, 'sha256': self.sha256,
-                    'stream_state': self.stream_state, 'credentials_missing': missing or self.credentials_missing}
+                    'stream_state': self.stream_state, 'credentials_missing': missing or self.credentials_missing,
+                    'max_bytes': self.limit}
             temporary = self.state_file.with_suffix('.tmp')
             try:
                 temporary.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
@@ -240,14 +246,14 @@ class DownloadJob:
     def select_asset(self):
         oversized = False
         last_error = None
-        for variant in self.video['variants']:
+        for variant in sorted(self.video['variants'], key=quality_rank, reverse=True):
             self.check_stop()
             try:
                 candidate = probe_video(variant['url'],self.request_headers(variant),self.video.get('credential_origin') or self.source)
             except (OSError, http.client.HTTPException, PreviewError) as error:
                 last_error = error
                 continue
-            if candidate['size'] is not None and candidate['size'] > self.manager.limit:
+            if candidate['size'] is not None and self.exceeds_limit(candidate['size']):
                 oversized = True
                 continue
             self.quality = variant.get('quality') or '原始画质'
@@ -286,7 +292,7 @@ class DownloadJob:
             self.filename=Path(safe_filename(self.video['filename'])).stem+'_'+self.id[:6]+'.mp4'
         if self.file.exists():self.filename=self.filename[:-4]+'_'+secrets.token_hex(3)+'.mp4'
         last_error=None
-        for variant in self.video['variants']:
+        for variant in sorted(self.video['variants'], key=quality_rank, reverse=True):
             self.check_stop();self.selected_variant=variant
             try:
                 stream_download(self,variant);return
@@ -340,7 +346,7 @@ class DownloadJob:
             self.check_stop()
             self.status = 'verifying'
             size = self.part.stat().st_size
-            if not 0 < size <= self.manager.limit or (self.asset['size'] is not None and size != self.asset['size']):
+            if size <= 0 or self.exceeds_limit(size) or (self.asset['size'] is not None and size != self.asset['size']):
                 raise PreviewError('视频文件不完整或超过 500 MB，未保存成品。')
             with self.part.open('rb') as video:
                 header=video.read(16)
@@ -394,7 +400,7 @@ class DownloadJob:
     def parallel(self):
         total = self.asset['size']
         if not self.plan:
-            chunk_size = min(self.manager.chunk_size, max(65536, math.ceil(total / self.workers)))
+            chunk_size = max(math.ceil(total / 4096), min(self.manager.chunk_size, max(65536, math.ceil(total / self.workers))))
             self.plan = [(start, min(total - 1, start + chunk_size - 1)) for start in range(0, total, chunk_size)]
             self.positions = [0] * len(self.plan)
             self.current = list(self.positions)
@@ -469,7 +475,7 @@ class DownloadJob:
             try:
                 with open_video(self.asset['url'],request_headers=self.request_headers(),credential_origin=self.video.get('credential_origin') or self.source) as response, self.part.open('wb') as partial:
                     length = response.getheader('Content-Length', '')
-                    if length.isdigit() and int(length) > self.manager.limit:
+                    if length.isdigit() and self.exceeds_limit(int(length)):
                         raise PreviewError('视频超过 500 MB，已停止下载。')
                     self.downloaded = 0
                     while True:
@@ -477,7 +483,7 @@ class DownloadJob:
                         chunk = response.read1(65536)
                         if not chunk:
                             break
-                        if self.downloaded + len(chunk) > self.manager.limit:
+                        if self.exceeds_limit(self.downloaded + len(chunk)):
                             raise PreviewError('视频超过 500 MB，已停止下载。')
                         self.throttle(len(chunk))
                         partial.write(chunk)
@@ -512,6 +518,8 @@ class DownloadManager:
                     continue
                 if data['id'] != file.stem or (data.get('filename') and Path(data['filename']).name != data['filename']):
                     continue
+                job_limit = data.get('max_bytes', (data['video'].get('options') or {}).get('max_bytes', self.limit))
+                if job_limit is not None and (type(job_limit) is not int or job_limit <= 0):continue
                 resource_url(data['source'])
                 for variant in data['video']['variants']:
                     resource_url(variant['url']);checked_headers(variant.get('headers'))
@@ -521,13 +529,13 @@ class DownloadManager:
                 if not isinstance(stream,dict) or not isinstance(stream.get('completed',{}),dict):continue
                 if len(stream.get('completed',{}))>20000:continue
                 if any(not isinstance(record,dict) or not isinstance(record.get('size'),int)
-                       or not 0<=record['size']<=self.limit or not re.fullmatch(r'[a-f0-9]{64}',str(record.get('sha256','')))
+                       or record['size']<0 or (job_limit is not None and record['size']>job_limit) or not re.fullmatch(r'[a-f0-9]{64}',str(record.get('sha256','')))
                        for record in stream.get('completed',{}).values()):continue
                 asset = data.get('asset')
                 if asset:
                     resource_url(asset['url'])
                     size = asset.get('size')
-                    if size is not None and (not isinstance(size, int) or not 0 < size <= self.limit):
+                    if size is not None and (not isinstance(size, int) or size <= 0 or (job_limit is not None and size > job_limit)):
                         continue
                     if not isinstance(asset.get('range'), bool) or not isinstance(asset.get('validator'), str):
                         continue
@@ -568,6 +576,7 @@ class DownloadManager:
                         job.video, job.source = video, source
                         job.credentials_missing=False
                         options=video.get('options') or {}
+                        job.limit=options.get('max_bytes',self.limit)
                         job.workers=min(16,max(1,int(options.get('connections',self.workers))))
                         job.speed_limit=max(0,int(options.get('speed_limit',0)))
                     job.launch()

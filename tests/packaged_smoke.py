@@ -100,7 +100,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
-    parser.add_argument('--expected-version',default='0.3.6')
+    parser.add_argument('--expected-version',default='0.3.61')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:

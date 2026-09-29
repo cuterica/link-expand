@@ -92,7 +92,8 @@ def parse_post(data: dict, url: str) -> Preview:
             bitrate = int(variant.get('bitrate') or 0)
             variants.append({'url': candidate, 'bitrate': bitrate, 'width': width, 'height': height,
                              'quality': f'{width}×{height}' if dimensions else '原始画质'})
-        variants.sort(key=lambda variant: (variant['bitrate'], variant['width'] * variant['height']), reverse=True)
+        from .quality import quality_rank
+        variants.sort(key=quality_rank, reverse=True)
         if variants:
             preview.videos.append({'index': index, 'post_id': reference['id'], 'author': handle,
                                    'duration_ms': int(info.get('duration_millis') or 0), 'variants': variants})

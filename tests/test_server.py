@@ -181,6 +181,17 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(status,200);self.assertEqual(body,b'PK-test')
             self.assertTrue(unquote(headers['Content-Disposition']).endswith(path.name))
 
+    def test_download_size_option_reaches_manager_and_rejects_other_values(self):
+        catalog=self.app.catalog({'source':'https://example.com/video.mp4','title':'Video',
+            'resources':[{'index':1,'post_id':'sample','variants':[{'url':'https://example.com/video.mp4'}]}]})
+        with patch.object(self.app.downloads,'start',return_value={'id':'test'}) as start:
+            for size in [500_000_000,None]:
+                status,_,_=self.request('/api/download/start',{'catalog_id':catalog['id'],'index':1,'max_bytes':size})
+                self.assertEqual(status,200)
+                self.assertEqual(start.call_args.args[0]['options']['max_bytes'],size)
+            for size in [0,True,-1,'unlimited',500_000_001]:
+                self.assertEqual(self.request('/api/download/start',{'catalog_id':catalog['id'],'index':1,'max_bytes':size})[0],400)
+
 
 if __name__ == "__main__":
     unittest.main()

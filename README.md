@@ -6,21 +6,21 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.6)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.61)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.6-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.61-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.3.6`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.3.61`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.6)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.61)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
 
-Mac 版本显示 `v0.3.6`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.3.61`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 
@@ -69,13 +69,13 @@ bash run.sh
 
 ## 通用下载
 
-在「通用下载」输入文件、视频、音频、播放清单或网页地址，点击「识别下载资源」，选择资源后点击「开始下载」。普通文件下载不需要先生成预览卡片。每个任务保留原先的 **500,000,000 字节（500 MB）上限**，超过限制会停止，不生成冒充完整视频的截断文件。
+在「通用下载」输入文件、视频、音频、播放清单或网页地址，点击「识别下载资源」，选择资源后点击「开始下载」。普通文件下载不需要先生成预览卡片。「下载大小」可选 **500 MB** 或 **无限制**，默认 500 MB，并记住选择。500 MB 模式自动选择上限内的最佳可用版本；无限制模式优先最大分辨率，再比较帧率和码率，不设置文件大小上限。所选上限随任务保存，重开和续传保留；暂停或失败后可切换大小选项再继续下载。此设置同样适用于普通文件、HLS / DASH、复制文件和另存。
 
 | 资源来源 | 当前处理方式 |
 | --- | --- |
 | HTTP / HTTPS 文件直链 | 保留文件名和后缀，支持 PDF、压缩包、安装包、图片等二进制文件 |
 | MP4 / WebM 等音视频直链 | 下载完整原文件，不转码 |
-| 公开 X / 推特推文 | 专用解析公开嵌入数据，支持多个视频，自动选择 500 MB 内的最高可用 MP4 |
+| 公开 X / 推特推文 | 专用解析公开嵌入数据，支持多个视频，按大小选项自动选择最佳可用 MP4，无限制优先最大分辨率 |
 | 普通网页 | 解析 video / audio / source、Open Graph、JSON-LD、脚本里的媒体地址与文件链接 |
 | 动态播放器 | 手动点击「动态网页识别」，在独立临时浏览器中读取播放请求；最长约 28 秒 |
 | 复杂或已登录网页 | 使用附带的 Chrome / Edge 捕获扩展，把实际播放请求及必要请求头导入本地软件 |
@@ -107,13 +107,51 @@ Windows ZIP 内含 `browser-extension` 文件夹，Release 也提供单独的扩
 
 未启用浏览器联动时，X 走公开嵌入数据解析。实测样例：[X 官方开发者公开视频](https://x.com/TwitterDev/status/1460323737035677698)，完整 11.093 秒，1280×720，含 H.264 视频与 AAC 音频。专用接口可能调整，需要持续维护。
 
-B 站 HTTP 412 只说明当前请求被拦截，不能说明你日常 Edge 也需要验证。v0.3.6 的顺序是：普通读取 → 可选的公开 BV 链接解析接口 → Playwright 可见真实浏览器；已连接扩展时优先直接读取已正常打开的同一页面，不重新加载、不播放或关闭个人标签页。没有扩展也能触发回退。
+B 站 HTTP 412 只说明当前请求被拦截，不能说明你日常 Edge 也需要验证。v0.3.61 的顺序是：普通读取 → 可选的公开 BV 链接解析接口 → Playwright 可见真实浏览器；已连接扩展时优先直接读取已正常打开的同一页面，不重新加载、不播放或关闭个人标签页。没有扩展也能触发回退。
 
 公开视频解析采用 [fysh1010/bilibili-mcp 的接口](https://github.com/fysh1010/bilibili-mcp/blob/main/src/BilibiliApi.ts)，请求 `https://api.bugpk.com/api/bilibili`。只发送标准 BV 链接（保留分 P、去除追踪参数），不发送 Cookie、Authorization、网页正文或图片。页面提供开关，可以禁用此第三方回退；关闭后不请求该服务。解析结果和画质依赖服务，不承诺其长期可用或全部视频均能下载。
 
 实际验收链接 `BV1cSec6tEux`：在扩展未连接时，软件成功展示标题、摘要、封面及下载选项；完整下载 140,922,591 字节，1280×590 H.264 + AAC，1631.296 秒，SHA-256 `ecfcbb24a8b74f699bdbec3a5906fd36b38fd21de99de81dbf4d46a8ec6b9d6c`。可见 Edge 的独立匿名会话实测仍为 412，因此不把“打开浏览器”当成解决风控的保证。
 
 Playwright 回退使用安装的 Windows Edge / Mac Chrome，以浏览器自己的 TLS、Cookie 和 JavaScript 访问，不经过旧截图模块的 Python HTTP 重放。它使用 Link Expand 专用浏览器目录；首次需要登录时可在此窗口正常登录，状态由这个独立浏览器在本机保存。通过扩展共享时只读取当前网站适用的 Cookie，保留 Cookie 的安全属性，不解密或复制整个个人浏览器配置。
+
+## 网站适配清单
+
+更新时间：2026-09-29。这里区分**链接预览**和**完整文件下载**；预览成功不等于视频下载成功。「已实测」只指列出的真实样例和功能，不能代表该站所有内容都通过；测试中的虚构域名、模拟接口不计为网站验收。
+
+### 已经验证的网站
+
+| 网站 | 已实测功能 | 样例与范围 |
+| --- | --- | --- |
+| **X / Twitter** | 标题、摘要、封面；公开推文完整视频下载；文件复制 | [官方开发者推文](https://x.com/TwitterDev/status/1460323737035677698)：完整 MP4，1280×720，11.093 秒，含音视频。仅验证公开样例，未验收私密推文、直播、订阅内容 |
+| **哔哩哔哩** | 标题、摘要、封面；完整 MP4；Windows / Mac 实际窗口、暂停、退出重开续传、文件接收与另存 | [BV1cSec6tEux](https://www.bilibili.com/video/BV1cSec6tEux/)：140,922,591 字节，1280×590，1631.296 秒，含音视频。使用可关闭的第三方公开链接解析回退，未证明匿名真实浏览器可以绕过 412，也未验收会员／付费内容 |
+| **GitHub** | 公开主页标题、摘要、网页封面及卡片生成 | [github.com](https://github.com/)；这项验收是网页预览，未把 GitHub 视频或整个仓库下载列为已验证 |
+| **MDN 示例媒体** | 视频截图、直接 MP4 资源识别、完整文件下载与校验 | [flower.mp4](https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4)；验证直链视频，不代表所有 MDN 网页均需或支持视频下载 |
+| **Example.com** | 无封面网页的标题／正文读取及实际网页截图 | [example.com](https://example.com/)；不包含视频下载验收 |
+
+以上验收记录来自 `tests/packaged_smoke.py`、Windows / Mac 全流程日志；新版本大小与最高画质选择的记录见 [下载大小与画质验收](DOWNLOAD-LIMIT-TEST-REPORT.md)。HLS、AES-128 HLS、DASH、多轨合并以及超过 500 MB 的文件在受控真实媒体／HTTP 服务上验证过；这些属于格式和引擎验收，没有据此把某个未测网站标为已支持。
+
+### 预计可尝试，尚未进行网站验收
+
+下面是依据当前解析器和下载引擎能力推断的候选清单，**不是承诺已适配**。成功条件是页面或正常浏览器会话提供本程序能处理的公开文件地址、MP4 / WebM、有限 HLS / DASH 清单。
+
+| 网站或类别 | 预计可尝试的功能 | 进入方式与待确认事项 |
+| --- | --- | --- |
+| **Wikimedia Commons / 维基媒体** | 图片预览、图片／视频原文件下载 | 优先输入原文件地址；文件页自动发现资源和不同视频编码仍需实测 |
+| **Internet Archive** | 公开条目预览、公开视频／音频及普通文件下载 | 优先输入条目提供的下载直链；条目页、受限文件及多文件列表未验收 |
+| **Vimeo** | 视频预览、已取得的 MP4 / HLS / DASH 地址下载 | 可输入本人或发布者提供的播放／下载链接；公开视频页面自动解析和浏览器捕获未验收，不要求购买 Vimeo API 方案 |
+| **Dailymotion、Reddit、微博** | 页面预览；有可用媒体地址时尝试完整下载 | 先普通识别，再动态识别或 Chrome / Edge 扩展；尚未验证实际网站会话、资源发现及合并 |
+| **Pexels、Pixabay 等素材站** | 图片预览、已有的图片／视频下载直链 | 有效公开原文件直链可交给通用引擎；网站页面、跳转和防盗链需要实测 |
+| **微信公众号文章、知乎、掘金、CSDN、简书、Medium、公开博客／新闻页** | 标题、摘要、配图；无合适图片时网页截图 | 按普通网页或独立浏览器流程尝试。这里只预测预览能力；登录、验证码、动态内容和具体页面未验收 |
+| **自建网站、对象存储或 CDN 公开文件** | 普通文件、MP4 / WebM、有限 HLS / DASH 下载 | 输入真实公网地址；实际能否多连接与续传取决于该服务器的 Range、资源标识和请求头 |
+
+Vimeo 候选判断参考其[官方视频文件链接说明](https://developer.vimeo.com/api/files/video-links)：支持这些资源格式是推断依据，不是本项目已经跑通 Vimeo 的证据。维基媒体和 Internet Archive 同样需要用真实链接再验收。
+
+### 还不能算已适配的平台
+
+**YouTube、抖音、快手、TikTok、Instagram、Facebook、小红书、爱奇艺、腾讯视频、优酷、Netflix** 尚未做对应网站全流程验收，也没有这些网站的专用解析器。可以尝试网页预览或在正常浏览器中捕获可用资源，但不能承诺输入页面链接就能下载完整视频。签名、登录、页面接口、分离音视频和播放保护需要分别处理；DRM、无结束的直播与私有播放协议不在当前通用下载范围内。
+
+无限制模式自动选的是**已经识别到的版本中**最大分辨率、最高可用画质；如果第三方接口或网站只给了一个低清版本，软件不会自动产生或恢复未提供的高清版本。
 
 ## 本地运行
 
@@ -161,7 +199,7 @@ Mac 验证命令：
 ```bash
 python tests/macos_clipboard_smoke.py
 python tests/macos_full_chain.py --app path/to/LinkExpand.app --restart
-python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.6
+python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand --expected-version 0.3.61
 ```
 
 ## Mac 原生界面验收
@@ -174,4 +212,9 @@ python tests/packaged_smoke.py path/to/LinkExpand.app/Contents/MacOS/LinkExpand 
 
 v0.3.6 使用真实 Windows 系统上的分发 EXE 和独立可见浏览器，从 Control-V 输入 B 站链接开始，实际操作预览、编辑、图文复制与接收编辑器粘贴、图片导出、视频下载、暂停、退出重开、续传、完整文件粘贴和另存。完整文件 140,922,591 字节，接收端实际读取文件后计算的 SHA-256 与原文件一致。
 
-[Windows 验收报告](WINDOWS-TEST-REPORT.md) 记录步骤、边界和修复。测试脚本为 `python tests/windows_full_chain.py path/to/LinkExpand-0.3.6-Windows-x64.exe`。发布附件 `Windows-validation-v0.3.6.zip` 包含实际界面截图和日志；没有把微信 / QQ 的实际客户端列为已验收。Mac 完整链路记录见 [Mac 验收报告](MACOS-TEST-REPORT.md)，v0.3.6 Mac 包另通过原生窗口、实际图文粘贴、图片导出和退出回归。
+[Windows 验收报告](WINDOWS-TEST-REPORT.md) 记录步骤、边界和修复。测试脚本为 `python tests/windows_full_chain.py path/to/LinkExpand-0.3.6-Windows-x64.exe --expected-version 0.3.6`。v0.3.6 发布附件 `Windows-validation-v0.3.6.zip` 包含实际界面截图和日志；没有把微信 / QQ 的实际客户端列为已验收。Mac 完整链路记录见 [Mac 验收报告](MACOS-TEST-REPORT.md)，v0.3.6 Mac 包另通过原生窗口、实际图文粘贴、图片导出和退出回归。
+
+
+## 下载大小与最高画质验收
+
+v0.3.61 新增 500 MB / 无限制切换，Windows 与 Mac 实测超过 500 MB 的下载、重启续传、导出和原生文件复制；分发包另实际走通无限制选择及真实视频的完整界面链路。详见 [下载大小与画质报告](DOWNLOAD-LIMIT-TEST-REPORT.md)，验证附件为 `download-validation-v0.3.61.zip`。
