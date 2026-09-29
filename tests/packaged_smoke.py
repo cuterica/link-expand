@@ -100,7 +100,7 @@ def verify_video_file_clipboard(expected_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('executable', type=Path)
-    parser.add_argument('--expected-version',default='0.3.2')
+    parser.add_argument('--expected-version',default='0.3.3')
     args = parser.parse_args()
     executable = args.executable.resolve()
     with socket.socket() as reserved:
@@ -184,6 +184,29 @@ def main():
                 with urllib.request.urlopen(request,timeout=10) as response:
                     latest=json.load(response);assert latest['url']==browser_url
                 print('PASS: packaged browser preview import without refetching the blocked Bilibili page',flush=True)
+                request=urllib.request.Request(base+'/api/capabilities',headers={'X-Local-Token':token})
+                with urllib.request.urlopen(request,timeout=10) as response:pairing=json.load(response)['browser_pairing_key']
+                def paired_post(path,data):
+                    request=urllib.request.Request(base+path,data=json.dumps(data).encode(),headers={
+                        'Content-Type':'application/json','X-Local-Token':pairing,'Origin':'chrome-extension://'+'a'*32})
+                    with urllib.request.urlopen(request,timeout=10) as response:return json.load(response)
+                client='packaged-bridge-fixture'
+                paired_post('/api/browser/poll',{'client_id':client,'browser':'Edge' if os.name=='nt' else 'Chrome'})
+                bridge_job=post('/api/browser/request',{'url':browser_url})
+                claim=paired_post('/api/browser/poll',{'client_id':client,'browser':'Edge' if os.name=='nt' else 'Chrome'})
+                assert claim['job']['id']==bridge_job['id']
+                completed=paired_post('/api/browser/result',{'id':bridge_job['id'],'client_id':client,'source':browser_url,
+                    'preview':{'url':browser_url,'title':'Automatic browser preview','description':'Existing browser session'},
+                    'candidates':[{'url':'https://cdn.example.com/full.mp4','kind':'video','headers':{'Cookie':'fixture-private-cookie'}},
+                                  {'url':'https://cdn.example.com/full.m4a','kind':'audio'}]})
+                assert completed['accepted']
+                request=urllib.request.Request(base+'/api/browser/jobs/'+bridge_job['id'],headers={'X-Local-Token':token})
+                with urllib.request.urlopen(request,timeout=10) as response:bridge_result=response.read()
+                assert b'fixture-private-cookie' not in bridge_result
+                result=json.loads(bridge_result)
+                assert result['status']=='complete' and result['result']['preview']['title']=='Automatic browser preview'
+                assert result['result']['catalog']['resources'][0]['kind']=='pair'
+                print('PASS: packaged automatic browser jobs, persistent pairing key, video/audio pair, private headers remain local',flush=True)
                 x_preview = post('/api/preview', {'url':'https://x.com/TwitterDev/status/1460323737035677698'})
                 assert x_preview['videos']
                 job = post('/api/video/start', {'id':x_preview['id'],'video_index':x_preview['selected_video']})

@@ -27,6 +27,7 @@ from .metadata import Preview, PreviewError, clean_text, get_preview, normalize_
 from .sharing import rich_html
 from .visuals import attach_visual
 from .video_downloads import DownloadManager, MAX_VIDEO_BYTES
+from .browser_bridge import BrowserBridge, pairing_key
 
 STATIC = Path(__file__).parent / "static"
 
@@ -45,6 +46,8 @@ class App:
         self._downloads = None
         self.catalogs = OrderedDict()
         self.browser_preview_id = None
+        self.bridge = BrowserBridge()
+        self.bridge_token = pairing_key()
 
     def browser_preview(self,data,source):
         if not isinstance(data,dict):raise PreviewError('浏览器网页预览数据无效。')
@@ -57,7 +60,22 @@ class App:
         preview=Preview(url,title,concise_summary(str(data.get('description',''))),domain,
                         clean_text(str(data.get('site_name','')),80) or domain,summary_source='浏览器网页摘要')
         image=str(data.get('image_url',''))
-        if image:
+        image_data=data.get('image_data')
+        if image_data:
+            import base64
+            from io import BytesIO
+            from PIL import Image
+            if not isinstance(image_data,str) or not re.match(r'^data:image/(png|jpeg|webp);base64,',image_data):
+                raise PreviewError('浏览器图片格式无效。')
+            try:
+                content=base64.b64decode(image_data.split(',',1)[1],validate=True)
+                if len(content)>2_000_000:raise ValueError('Image too large')
+                with Image.open(BytesIO(content)) as check:
+                    if check.width*check.height>16_000_000:raise ValueError('Image too large')
+                    check.verify()
+                preview.image=content;preview.visual_source=clean_text(str(data.get('visual_source','浏览器封面')),40)
+            except (ValueError,OSError,Image.DecompressionBombError) as error:raise PreviewError('浏览器图片无效或过大。') from error
+        elif image:
             try:
                 preview.image=fetch_resource(normalize_url(image),MAX_IMAGE,timeout=8,headers={'Referer':url,'User-Agent':'Mozilla/5.0'}).body
                 preview.visual_source='浏览器封面'
@@ -200,7 +218,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def extension_origin(self):
         value=self.headers.get('Origin','')
-        if urlsplit(self.path).path=='/api/capture/import' and re.fullmatch(r'chrome-extension://[a-p]{32}',value):return value
+        if urlsplit(self.path).path in {'/api/capture/import','/api/browser/poll','/api/browser/result'} and re.fullmatch(r'chrome-extension://[a-p]{32}',value):return value
         return None
 
     def do_OPTIONS(self):
@@ -213,7 +231,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def authenticated(self):
         token = self.headers.get("X-Local-Token", "")
-        if not hmac.compare_digest(token, self.server.app.token):
+        bridge_route=urlsplit(self.path).path in {'/api/capture/import','/api/browser/poll','/api/browser/result'}
+        paired=bridge_route and hmac.compare_digest(token,self.server.app.bridge_token)
+        if not paired and not hmac.compare_digest(token, self.server.app.token):
             self.respond_json(403, {"error": "会话已更新，请刷新页面。"})
             return False
         return True
@@ -254,7 +274,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.authenticated():
                 self.respond_json(200, {'native_rich': os.name == 'nt' or sys.platform=='darwin', 'version': __version__,
                                        'copy_video': os.name == 'nt' or sys.platform=='darwin', 'platform':sys.platform,'max_video_bytes': MAX_VIDEO_BYTES,
-                                       'ffmpeg':bool(__import__('linkexpand.streaming',fromlist=['ffmpeg_path']).ffmpeg_path())})
+                                       'ffmpeg':bool(__import__('linkexpand.streaming',fromlist=['ffmpeg_path']).ffmpeg_path()),
+                                       'browser_pairing_key':app.bridge_token})
+        elif path=='/api/browser/status' or re.fullmatch(r'/api/browser/jobs/[a-f0-9]{24}',path):
+            if not self.authenticated():return
+            try:self.respond_json(200,app.bridge.status() if path=='/api/browser/status' else app.bridge.get(path.rsplit('/',1)[1]))
+            except PreviewError as error:self.respond_json(404,{'error':str(error)})
         elif path == '/api/health':
             self.respond_json(200, {'app': 'link-expand', 'version': __version__})
         elif path=='/api/capture/preview':
@@ -320,7 +345,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 65536:
+            path = urlsplit(self.path).path
+            if not 0 < length <= (3_000_000 if path=='/api/browser/result' else 65536):
                 raise PreviewError("请求内容过大或为空。")
             if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/json":
                 raise PreviewError("仅支持 JSON 请求。")
@@ -329,7 +355,31 @@ class Handler(BaseHTTPRequestHandler):
                 raise PreviewError("请求格式有误。")
             app = self.server.app
             path = urlsplit(self.path).path
-            if path == "/api/preview":
+            if path=='/api/browser/request':
+                result=app.bridge.request(str(data.get('url','')))
+            elif path=='/api/browser/cancel':
+                result=app.bridge.cancel(str(data.get('id','')))
+            elif path=='/api/browser/poll':
+                result=app.bridge.poll(data.get('client_id'),data.get('browser'),data.get('active'))
+            elif path=='/api/browser/result':
+                key=str(data.get('id',''));client=str(data.get('client_id',''))
+                if not app.bridge.accepts(key,client):result={'accepted':False}
+                elif data.get('error'):result=app.bridge.finish(key,client,error=data['error'])
+                else:
+                    try:
+                        source=str(data.get('source',''))
+                        # Redirects may change the URL; preview and resource origin must agree.
+                        preview=app.browser_preview(data.get('preview'),source)
+                        candidates=data.get('candidates',[])
+                        if not isinstance(candidates,list):raise PreviewError('媒体资源格式无效。')
+                        from .media_resolver import imported_candidates
+                        catalog=None
+                        if candidates:
+                            imported=imported_candidates(source,candidates);imported['preview']=preview
+                            catalog=app.catalog(imported)
+                        result=app.bridge.finish(key,client,{'preview':preview,'catalog':catalog})
+                    except PreviewError as error:result=app.bridge.finish(key,client,error=error)
+            elif path == "/api/preview":
                 result = app.create(str(data.get("url", "")))
             elif path == "/api/manual":
                 result = app.manual(data)

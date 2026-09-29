@@ -122,6 +122,30 @@ class ServerTests(unittest.TestCase):
             self.assertEqual([value for key,value in response.getheaders() if key.lower()=='access-control-allow-origin'],[origin])
             self.assertIn('X-Local-Token',response.getheader('Access-Control-Allow-Headers'))
         finally:connection.close()
+    def test_automatic_bridge_and_pairing_key_scope(self):
+        origin={'Origin':'chrome-extension://'+'a'*32,'Sec-Fetch-Site':'cross-site','X-Local-Token':self.app.bridge_token}
+        client='automatic-fixture-001'
+        status,_,_=self.request('/api/browser/poll',{'client_id':client,'browser':'Edge'},origin)
+        self.assertEqual(status,200)
+        self.assertEqual(self.request('/api/manual',{'url':'https://example.com','title':'Bad'}, {'X-Local-Token':self.app.bridge_token})[0],403)
+        self.assertEqual(self.request('/api/browser/status',headers=origin)[0],403)
+        status,body,_=self.request('/api/browser/request',{'url':'https://www.bilibili.com/video/BV1cSec6tEux/'})
+        self.assertEqual(status,200);key=json.loads(body)['id']
+        _,body,_=self.request('/api/browser/poll',{'client_id':client,'browser':'Edge'},origin)
+        self.assertEqual(json.loads(body)['job']['id'],key)
+        url='https://www.bilibili.com/video/BV1cSec6tEux/'
+        payload={'id':key,'client_id':client,'source':url,'preview':{'url':url,'title':'自动读取 Edge','description':'已登录网页摘要'},
+            'candidates':[{'url':'https://cdn.example.com/video.mp4','kind':'video','headers':{'Cookie':'private-video-cookie'}},
+                          {'url':'https://cdn.example.com/audio.m4a','kind':'audio'}]}
+        with patch('linkexpand.metadata.fetch_resource',side_effect=AssertionError('Do not refetch the blocked page')):
+            status,body,_=self.request('/api/browser/result',payload,origin)
+        self.assertEqual(status,200);self.assertTrue(json.loads(body)['accepted'])
+        _,body,_=self.request('/api/browser/jobs/'+key)
+        result=json.loads(body)
+        self.assertEqual(result['status'],'complete')
+        self.assertEqual(result['result']['preview']['title'],'自动读取 Edge')
+        self.assertEqual(result['result']['catalog']['resources'][0]['kind'],'pair')
+        self.assertNotIn(b'private-video-cookie',body)
     def test_logged_in_browser_preview_does_not_refetch_blocked_page(self):
         origin={'Origin':'chrome-extension://'+'a'*32,'Sec-Fetch-Site':'cross-site'}
         url='https://www.bilibili.com/video/BV1cSec6tEux/'

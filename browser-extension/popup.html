@@ -1,7 +1,9 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="popup.css"><script src="popup.js" defer></script><title>Link Expand</title></head><body>
-<h1>Link Expand · 浏览器捕获</h1><p>只捕获你手动启用的当前标签页，十分钟后自动停止。播放视频后刷新列表。</p>
+<h1>Link Expand · 浏览器联动</h1><p>配对一次后，在软件输入链接，自动使用此浏览器的登录会话读取预览和媒体。后台标签页读取后自动关闭。</p>
 <label>本地软件地址<input id="base" value="http://127.0.0.1:8765"></label>
 <label>配对码<input id="token" type="password" placeholder="在 Link Expand 点击“复制扩展配对码”"></label>
+<label><input id="auto-screenshot" type="checkbox" checked>没有可用图片时自动截图（授予调试权限；仅截取软件创建的标签页）</label>
+<div class="buttons"><button id="auto-enable">启用自动联动</button><button id="auto-disable">关闭自动联动</button></div><p id="auto-status"></p>
 <div class="buttons"><button id="start">捕获当前标签页</button><button id="stop">停止</button><button id="refresh">刷新列表</button></div>
 <button id="preview">导入当前网页预览</button><p>在已登录的 Edge / Chrome 中打开视频，可以直接导入此页标题、摘要与封面。</p>
 <select id="resources" multiple size="6"></select><button id="import">导入选中资源与预览</button>

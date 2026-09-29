@@ -8,11 +8,27 @@ async function refresh() {
 }
 (async () => {
   [active] = await chrome.tabs.query({active: true, currentWindow: true});
-  const config = await chrome.storage.local.get(['base', 'token']);
+  const config = await chrome.storage.local.get(['base', 'token', 'autoBridge', 'bridgeLastError', 'screenshots']);
   if (config.base) $('base').value = config.base;
   if (config.token) $('token').value = config.token;
+  if (config.screenshots !== undefined) $('auto-screenshot').checked = config.screenshots;
+  $('auto-status').textContent = config.autoBridge ? '自动联动已启用' + (config.bridgeLastError ? ' · ' + config.bridgeLastError : '') : '自动联动尚未启用';
   await refresh();
 })();
+$('auto-enable').onclick = async () => {
+  try {
+    const screenshots = $('auto-screenshot').checked;
+    const granted = await chrome.permissions.request({origins: ['http://*/*', 'https://*/*'], permissions: screenshots ? ['debugger'] : []});
+    if (!granted) throw new Error('需要网站读取权限，才能自动读取你在软件提交的网页和媒体。');
+    const result = await chrome.runtime.sendMessage({action: 'bridge-config', enabled: true, base: $('base').value, token: $('token').value, screenshots});
+    if (result?.error) throw new Error(result.error);
+    $('auto-status').textContent = '自动联动已启用；现在只需在软件输入链接。';
+  } catch (error) { $('auto-status').textContent = error.message; }
+};
+$('auto-disable').onclick = async () => {
+  await chrome.runtime.sendMessage({action: 'bridge-config', enabled: false});
+  $('auto-status').textContent = '自动联动已关闭';
+};
 $('start').onclick = async () => {
   try {
     const granted = await chrome.permissions.request({origins: ['http://*/*', 'https://*/*']});

@@ -7,7 +7,7 @@ const chrome = {
   webRequest: Object.fromEntries(['onBeforeSendHeaders','onResponseStarted','onCompleted','onErrorOccurred'].map(name => [name,{addListener: callback => listeners[name]=callback}])),
   runtime: {onMessage:{addListener: callback => listeners.message=callback}}
 };
-vm.runInNewContext(fs.readFileSync('browser-extension/worker.js','utf8'),{chrome,Map,Date,console});
+vm.runInNewContext(fs.readFileSync('browser-extension/worker.js','utf8'),{chrome,Map,Date,console,importScripts(){}});
 const tick = () => new Promise(resolve=>setImmediate(resolve));
 (async()=>{
   await new Promise(resolve=>listeners.message({action:'start',tabId:9,source:'https://example.com/page'},null,resolve));

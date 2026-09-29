@@ -17,6 +17,7 @@ let videoJob = null;
 let videoJobId = null;
 let videoPolling = false;
 let downloadCatalog = null;
+let browserPairingKey = '';
 const actionIds = ['copy-image', 'copy-text', 'download', 'download-cover'];
 
 async function api(path, data, signal) {
@@ -25,6 +26,28 @@ async function api(path, data, signal) {
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || '操作失败，请重试。');
   return result;
+}
+
+async function browserStatus() {
+  const response = await fetch('/api/browser/status', {headers: {'X-Local-Token': token}});
+  if (!response.ok) return {connected: false, browsers: []};
+  return response.json();
+}
+async function browserExpand(url, signal) {
+  const job = await api('/api/browser/request', {url}, signal);
+  const cancel = () => { void api('/api/browser/cancel', {id: job.id}).catch(() => {}); };
+  signal?.addEventListener('abort', cancel, {once: true});
+  try {
+    if (signal?.aborted) { cancel(); throw new DOMException('Cancelled', 'AbortError'); }
+    while (true) {
+      const response = await fetch('/api/browser/jobs/' + job.id, {signal, headers: {'X-Local-Token': token}});
+      const state = await response.json();
+      if (!response.ok || state.status === 'error') throw new Error(state.error || '浏览器读取失败。');
+      if (state.status === 'cancelled') throw new DOMException('Cancelled', 'AbortError');
+      if (state.status === 'complete') return state.result;
+      await new Promise(resolve => setTimeout(resolve, 700));
+    }
+  } finally { signal?.removeEventListener('abort', cancel); }
 }
 
 function feedback(message, error = false) {
@@ -97,7 +120,19 @@ async function expand(force = false) {
   lastRequested = url;
   setBusy(true);
   feedback('正在读取摘要与图片；没有合适图片时，会截取视频画面或网页。');
-  try { await display(await api('/api/preview', {url}, requestController.signal), job); }
+  const signal = requestController.signal;
+  try {
+    const status = await browserStatus();
+    if (signal.aborted) return;
+    if (status.connected) {
+      feedback(`正在通过已配对的 ${status.browsers.join(' / ')} 读取网页和媒体…`);
+      const result = await browserExpand(url, signal);
+      await display(result.preview, job);
+      if (job === revision && result.catalog) displayCatalog(result.catalog);
+    } else {
+      await display(await api('/api/preview', {url}, signal), job);
+    }
+  }
   catch (error) {
     if (job !== revision || error.name === 'AbortError') return;
     feedback(error.message, true);
@@ -195,6 +230,7 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
   .then(capabilities => {
     if (capabilities.version !== expectedVersion) throw new Error('页面与后台版本不一致，请关闭旧程序并重新启动新版。');
     nativeRich = capabilities.native_rich;
+    browserPairingKey = capabilities.browser_pairing_key || token;
     canCopyVideo = capabilities.copy_video;
     $('merge-component').textContent = capabilities.ffmpeg ? 'HLS / DASH 合并组件：已就绪' : 'HLS / DASH 合并需要免费的 FFmpeg；文件和普通视频直链不需要。';
     clipboardReady = true;
@@ -204,6 +240,7 @@ fetch('/api/capabilities', {headers: {'X-Local-Token': token}})
     setBusy(busy);
     $('video-download').disabled = !(downloadCatalog?.resources?.length || current?.videos?.length);
     restoreVideoJob();
+    refreshBrowserStatus();
     if(location.hash==='#browser-preview')$('capture-preview').click();
     else if(location.hash==='#browser-capture')$('capture-load').click();
   })
@@ -352,14 +389,32 @@ async function resolveDownload(scan) {
   videoError('');$('video-hint').textContent=scan?'动态识别中，最多等待约 28 秒…':'正在识别文件和媒体资源…';
   try {
     const headers=$('download-headers').value.trim()?JSON.parse($('download-headers').value):{};
-    displayCatalog(await api('/api/download/resolve',{url,headers,scan}));
+    const status=await browserStatus();
+    if (status.connected && !Object.keys(headers).length) {
+      // File links and public X APIs still use the downloader directly.
+      let catalog;
+      try { catalog=await api('/api/download/resolve',{url,headers,scan:false}); } catch (_) {}
+      if (catalog?.resources?.length) displayCatalog(catalog);
+      else {
+        const result=await browserExpand(url);
+        if (!result.catalog?.resources?.length) throw new Error('浏览器已读取网页，但尚未发现可下载媒体。需要安全验证时，请在浏览器完成后重试；也可手动捕获播放请求。');
+        displayCatalog(result.catalog);
+      }
+    } else displayCatalog(await api('/api/download/resolve',{url,headers,scan}));
   } catch (error) {videoError(error.message);}
   finally {buttons.forEach(button=>button.disabled=false);}
 }
 $('download-resolve').addEventListener('click',()=>resolveDownload(false));
 $('download-scan').addEventListener('click',()=>resolveDownload(true));
 $('download-url').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();resolveDownload(false);}});
-$('capture-pair').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(token);toast('配对码已复制，粘贴到浏览器捕获扩展；程序重启后需重新配对。');}catch(error){videoError(error.message);}});
+$('capture-pair').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(browserPairingKey || token);toast('配对码已复制。在扩展填写地址和配对码，点击“启用自动联动”；软件重启后仍然有效。');}catch(error){videoError(error.message);}});
+async function refreshBrowserStatus() {
+  try {
+    const status=await browserStatus();
+    $('browser-status').textContent=status.connected ? `${status.browsers.join(' / ')} 已连接 · 输入链接即可自动读取预览和媒体` : '浏览器自动联动未连接 · 在扩展中配对并启用一次即可';
+  } catch (_) { $('browser-status').textContent='浏览器联动暂时无法连接'; }
+}
+setInterval(refreshBrowserStatus, 5000);
 async function importPreview(preview) {
   clearTimeout(expandTimer);requestController?.abort();const job=++revision;
   $('url-input').value=preview.url;lastRequested=preview.url;setBusy(true);

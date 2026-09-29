@@ -59,8 +59,10 @@ def main():
         '下载完成可复制整个文件；保存目录 ~/Downloads/LinkExpand-videos。\n'
         'HLS/DASH、分离音视频合并需要免费的 FFmpeg（不内嵌）。可用 brew install ffmpeg，\n'
         '或把 ffmpeg 放到 ~/Library/Application Support/LinkExpand/tools/ffmpeg。\n'
-        '附带 Chrome 捕获扩展；按 browser-extension/README.md 安装、配对和导入播放请求。\n'
-        'Cookie/Authorization 不保存；需要登录的任务重启后重新导入。\n'
+        '附带 Chrome 联动扩展；按 browser-extension/README.md 安装配对一次，启用自动联动。\n'
+        '软件输入链接后自动读取已登录浏览器的预览与媒体；配对码跨重启保留。\n'
+        '无封面时可授予调试权限截取自己的后台标签页，不切换前台页面。\n'
+        'Cookie/Authorization 不保存；需要登录的任务重启后再次展开补充请求头。\n'
         '退出会暂停下载；截图与识别使用临时会话，关闭程序会清理自己的测试浏览器进程。\n'
         '项目与更新：https://github.com/cuterica/link-expand\n',encoding='utf-8')
     archive=output/(name+'.zip');archive.unlink(missing_ok=True)

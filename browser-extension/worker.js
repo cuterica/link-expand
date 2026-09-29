@@ -50,6 +50,7 @@ chrome.webRequest.onResponseStarted.addListener(details => {
 chrome.webRequest.onCompleted.addListener(details => pending.delete(details.requestId), {urls: ['http://*/*', 'https://*/*']});
 chrome.webRequest.onErrorOccurred.addListener(details => pending.delete(details.requestId), {urls: ['http://*/*', 'https://*/*']});
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (!['start', 'stop', 'list'].includes(message.action)) return;
   serialized(async () => {
     const tabs = await state();
     if (message.action === 'start') tabs[message.tabId] = {started: Date.now(), source: message.source, resources: []};
@@ -59,3 +60,4 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   }).catch(error => respond({error: error.message}));
   return true;
 });
+importScripts('page.js', 'bridge.js');
