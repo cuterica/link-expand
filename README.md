@@ -6,13 +6,15 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.4.0)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.4.1)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.4.0-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.4.1-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.4.0`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.4.1`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+
+v0.4.1 提速抖音预览：目标视频资料到达后立即返回，省去等待整页脚本和播放器加载；同一匿名样例浏览器阶段由 31.26 秒降至 8.35 秒。Windows / Mac 完整下载回归通过，详见 [抖音提速验收](DOUYIN-SPEED-TEST-REPORT.md)。实际耗时随网络和页面变化。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
@@ -26,9 +28,9 @@ Windows 替换当前运行的 EXE，Mac 替换当前 `.app`。更新前暂停下
 
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.4.0)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.4.1)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
 
-Mac 版本显示 `v0.4.0`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.4.1`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 

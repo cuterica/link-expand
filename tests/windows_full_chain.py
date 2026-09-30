@@ -115,7 +115,7 @@ def wait_backend(base,process):
 def main():
     if os.name!='nt':raise RuntimeError('Run this acceptance test with Windows Python')
     if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8')
-    parser=argparse.ArgumentParser();parser.add_argument('executable',type=Path);parser.add_argument('--expected-version',default='0.4.0');parser.add_argument('--unlimited',action='store_true');parser.add_argument('--automatic',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('executable',type=Path);parser.add_argument('--expected-version',default='0.4.1');parser.add_argument('--unlimited',action='store_true');parser.add_argument('--automatic',action='store_true');args=parser.parse_args()
     root=Path(__file__).resolve().parents[1]/'artifacts/windows-full-chain';root.mkdir(exist_ok=True)
     folder=Path(tempfile.mkdtemp(prefix='linkexpand-windows-chain-'));storage=folder/'downloads'
     with socket.socket() as reserved:reserved.bind(('127.0.0.1',0));port=reserved.getsockname()[1]

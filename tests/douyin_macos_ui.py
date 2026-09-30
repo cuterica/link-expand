@@ -8,7 +8,7 @@ URL='https://www.douyin.com/jingxuan?modal_id=7686432847778982833'
 def main():
  parser=argparse.ArgumentParser();parser.add_argument('--app',type=Path,required=True);args=parser.parse_args()
  root=Path.home()/'Library/Application Support/LinkExpand/douyin-qa';root.mkdir(exist_ok=True)
- with tempfile.TemporaryDirectory(prefix='linkexpand-tiktok-mac-') as folder:
+ with tempfile.TemporaryDirectory(prefix='linkexpand-douyin-mac-') as folder:
   with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
   base=f'http://127.0.0.1:{port}';log=(root/'app.log').open('w')
   process=subprocess.Popen([str(args.app/'Contents/MacOS/LinkExpand'),'--ui-test','--test-downloads-root',folder,'--port',str(port)],stdout=log,stderr=log,start_new_session=True)
@@ -21,10 +21,12 @@ def main():
    token=re.search(r'name="local-token" content="([^"]+)"',html).group(1);ui=UI(base,token)
    ui.wait('document.readyState','complete')
    ui.wait("!!document.getElementById('url-input')",True)
+   started=time.monotonic()
    ui.eval("(()=>{const node=document.getElementById('url-input');node.value="+json.dumps(URL)+";node.dispatchEvent(new Event('input'));return true;})()")
    ui.wait("document.getElementById('card-title').textContent",lambda value:'2026' in value,timeout=110)
    ui.wait("document.getElementById('cover-image').complete&&document.getElementById('cover-image').naturalWidth>0",True)
    ui.wait("!document.getElementById('video-download').disabled",True)
+   print(json.dumps({'stage':'input_to_preview','seconds':round(time.monotonic()-started,2)}),flush=True)
    ui.snapshot(root/'preview.png')
    print('PASS: actual Mac app Douyin input -> real caption, visible image and downloadable video.',flush=True)
    ui.click('video-download');ui.wait("document.getElementById('video-status').textContent",'下载完成',timeout=100)

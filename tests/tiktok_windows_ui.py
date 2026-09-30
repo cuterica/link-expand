@@ -16,7 +16,7 @@ def main():
   base=f'http://127.0.0.1:{port}';log=(root/'app.log').open('w')
   process=subprocess.Popen([str(args.executable.resolve()),'--no-browser','--ui-test','--test-downloads-root',folder,'--port',str(port)],creationflags=subprocess.CREATE_NEW_CONSOLE,stdout=log,stderr=log)
   try:
-   assert wait_backend(base,process)['version']=='0.4.0'
+   assert wait_backend(base,process)['version']=='0.4.1'
    with sync_playwright() as runtime:
     browser=runtime.chromium.launch(executable_path=str(Path(os.environ['LOCALAPPDATA'])/'ms-playwright/chromium-1228/chrome-win64/chrome.exe'),headless=False,handle_sigint=False)
     try:

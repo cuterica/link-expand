@@ -80,7 +80,9 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
     root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
     read_script = (root / 'browser-extension/page.js').read_text(encoding='utf-8')
     deadline = time.monotonic() + timeout
-    resources = {}; tasks = set(); checked = {}
+    resources = {}; tasks = set()
+    checked = {(initial.hostname, initial.port or (443 if initial.scheme == 'https' else 80)): True}
+    checks = {}
     async with async_playwright() as runtime:
         options = {'headless': False, 'viewport': {'width': 1280, 'height': 800}, 'accept_downloads': False,
                    'args': ['--no-first-run', '--no-default-browser-check'] + list(extra_args or []), 'timeout': 20000}
@@ -94,9 +96,14 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
                 request = route.request; parts = urlsplit(request.url)
                 if parts.scheme not in {'http', 'https'}:
                     await route.continue_(); return
+                if douyin and (request.resource_type == 'media' or re.search(r'/video/tos/|\.mp4(?:[?#]|$)', request.url, re.I)):
+                    # Exact target URLs are already in RENDER_DATA; do not load the feed/player.
+                    await route.abort(); return
                 key = (parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80))
                 if key not in checked:
-                    try: await asyncio.to_thread(public_addresses, *key); checked[key] = True
+                    if key not in checks:
+                        checks[key] = asyncio.create_task(asyncio.to_thread(public_addresses, *key))
+                    try: await checks[key]; checked[key] = True
                     except PreviewError: checked[key] = False
                 if not checked[key]: await route.abort(); return
                 # Native browser TLS, HTTP headers, cookies, redirects and JavaScript.
@@ -121,7 +128,7 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
             def observed(response):
                 task = asyncio.create_task(capture(response)); tasks.add(task); task.add_done_callback(tasks.discard)
             page.on('response', observed)
-            try: response = await page.goto(url, wait_until='domcontentloaded', timeout=25000)
+            try: response = await page.goto(url, wait_until='commit' if douyin else 'domcontentloaded', timeout=25000)
             except BrowserError:
                 if page.url == 'about:blank': raise PreviewError('Playwright 已打开真实浏览器，但网页加载失败。')
                 response = None
@@ -129,16 +136,17 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
             data = None
             while time.monotonic() < deadline:
                 try:
-                    data = await page.evaluate(read_script + '\nlinkExpandPage(true)')
+                    data = await page.evaluate(read_script + ('\nlinkExpandPage(false)' if douyin else '\nlinkExpandPage(true)'))
                     ready=not social or any(item.get(field)==social['id'] for item in data.get('candidates',[]))
                     if not data.get('error') and data.get('preview', {}).get('title') and ready:
+                        if douyin: break
                         await page.wait_for_timeout(2500)
                         data = await page.evaluate(read_script + '\nlinkExpandPage(false)')
                         media_ready=not social or any(item['kind']=='video' and '/video/' in urlsplit(item['url']).path and media_host(item['url']) for item in resources.values())
                         if not data.get('error') and media_ready: break
                 except BrowserError:
                     if page.is_closed(): raise PreviewError('真实浏览器窗口已关闭。')
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(200 if douyin else 1000)
             if not data or data.get('error') or not data.get('preview', {}).get('title'):
                 detail = f'（HTTP {status}）' if status else ''
                 raise PreviewError(f'Playwright 已实际打开真实浏览器，网页仍拒绝本次访问{detail}。这不能证明你的日常浏览器也需要验证；请启用扩展读取已经正常打开的同一页面。')
@@ -178,7 +186,10 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
                 if not found:
                     png = await page.screenshot(type='jpeg', quality=75, timeout=5000)
                     preview.update(image_data='data:image/jpeg;base64,' + base64.b64encode(png).decode(), visual_source='真实浏览器网页截图')
-            items = {item['url']: item for item in data.get('candidates', [])}
+            items = {}
+            for item in data.get('candidates', []):
+                # A DOM video may repeat a tagged social URL without its target ID.
+                items[item['url']] = {**items.get(item['url'], {}), **item}
             for address,item in resources.items():items[address]={**items.get(address,{}),**item}
             if social:
                 agent=await page.evaluate('navigator.userAgent')
@@ -200,6 +211,8 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
             return {'source': preview['url'], 'preview': preview, 'candidates': candidates[:64], 'method': 'playwright-visible'}
         finally:
             for task in list(tasks): task.cancel()
+            for task in list(checks.values()):
+                if not task.done(): task.cancel()
             await context.close()
 
 
