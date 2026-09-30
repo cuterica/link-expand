@@ -213,6 +213,19 @@ class App:
                 except PreviewError as second_error:
                     raise PreviewError(f'{first_error} 自动回退结果：{second_error}') from None
             attach_visual(preview)
+            from .tiktok import post_reference as tiktok_reference
+            if tiktok_reference(preview.url) and preview.videos:
+                from .video_downloads import probe_video
+                variant=preview.videos[0]['variants'][0]
+                try:probe_video(variant['url'],variant.get('headers'),variant.get('credential_origin'))
+                except PreviewError:
+                    try:
+                        result=self.real_browser(preview.url)
+                        if result.get('catalog'):
+                            answer=dict(result['preview']);answer['catalog']=result['catalog'];return answer
+                    except PreviewError as error:preview.warnings.append(str(error))
+                    preview.videos=[];preview.selected_video=None
+                    preview.warnings.append('TikTok 视频地址需要当前浏览器会话；请重试或启用浏览器联动。')
             visual = original_visual(preview)
             preview.image = visual
             cover = thumbnail(preview)
@@ -437,6 +450,10 @@ class Handler(BaseHTTPRequestHandler):
                         candidates=data.get('candidates',[])
                         if not isinstance(candidates,list):raise PreviewError('媒体资源格式无效。')
                         from .media_resolver import imported_candidates
+                        from .tiktok import post_reference as tiktok_reference,browser_video
+                        if tiktok_reference(source) and not browser_video(source,candidates):
+                            result=app.fallback_job(key,client,data.get('session'))
+                            self.respond_json(200,result);return
                         catalog=None
                         if candidates:
                             imported=imported_candidates(source,candidates);imported['preview']=preview
@@ -506,7 +523,19 @@ class Handler(BaseHTTPRequestHandler):
                 if not app.fetch_slots.acquire(blocking=False):raise PreviewError('正在处理其他链接，请稍后重试。')
                 try:
                     url=str(data.get('url',''))
-                    try:result=app.catalog(resolve(url,data.get('headers'),data.get('scan') is True))
+                    try:
+                        resolved=resolve(url,data.get('headers'),data.get('scan') is True)
+                        from .tiktok import post_reference as tiktok_reference
+                        if tiktok_reference(url):
+                            from .video_downloads import probe_video
+                            variant=resolved['resources'][0]['variants'][0]
+                            try:probe_video(variant['url'],variant.get('headers'),variant.get('credential_origin'))
+                            except PreviewError:
+                                recovered=app.real_browser(url)
+                                if not recovered.get('catalog'):raise PreviewError('TikTok 浏览器会话尚未取得视频地址，请重试。')
+                                result=recovered['catalog']
+                            else:result=app.catalog(resolved)
+                        else:result=app.catalog(resolved)
                     except PreviewError:
                         from .bilibili_parser import public_reference
                         if data.get('bili_parser') is False or not public_reference(url):raise

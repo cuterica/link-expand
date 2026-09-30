@@ -45,7 +45,7 @@ def select_image(preview: Preview) -> bool:
         if remaining < 1:
             break
         try:
-            data = fetch_resource(candidate["url"], MAX_IMAGE, timeout=min(6, remaining)).body
+            data = fetch_resource(candidate["url"], MAX_IMAGE, timeout=min(6, remaining),headers={'Referer':preview.url,'User-Agent':'Mozilla/5.0'}).body
             score = image_score(data, candidate["priority"])
             if score > best_score:
                 best_score, best = score, (candidate, data)

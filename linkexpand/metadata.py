@@ -339,6 +339,8 @@ def get_preview(url: str) -> Preview:
             preview.image = resource.body
             preview.visual_source = "链接图片"
         return preview
+    from .tiktok import post_reference as tiktok_reference, parse_resource
+    if tiktok_reference(resource.url):return parse_resource(resource)
     return extract_metadata(resource)
 
 

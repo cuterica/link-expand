@@ -2,11 +2,11 @@
 function linkExpandPage(play = false) {
   const meta = name => document.querySelector(`meta[property="${name}"],meta[name="${name}"]`)?.content || '';
   const text = value => (value || '').replace(/\s+/g, ' ').trim();
-  const title = text(meta('og:title') || meta('twitter:title') || document.title).slice(0, 180);
+  let title = text(meta('og:title') || meta('twitter:title') || document.title).slice(0, 180);
   if (/出错啦.*bilibili|access denied|just a moment|安全验证|访问验证/i.test(title)) {
     return {error: '网页要求安全验证。请在此浏览器中正常打开链接、完成验证后，在软件重试。'};
   }
-  const description = text(meta('og:description') || meta('twitter:description') || meta('description') ||
+  let description = text(meta('og:description') || meta('twitter:description') || meta('description') ||
     [...document.querySelectorAll('article p,main p')].slice(0, 5).map(node => node.textContent).join(' ')).slice(0, 500);
   let image = meta('og:image:secure_url') || meta('og:image') || meta('twitter:image') || document.querySelector('video[poster]')?.poster || '';
   if (!image) {
@@ -33,6 +33,26 @@ function linkExpandPage(play = false) {
       if (variants[0]) add(variants[0].baseUrl || variants[0].base_url, kind, {mime: variants[0].mimeType || ''});
     }
   }
+  const tiktokReference = /^(?:[\w-]+\.)*tiktok\.com$/i.test(location.hostname) && location.pathname.match(/\/@[^/]+\/video\/(\d{10,24})/);
+  if (tiktokReference) {
+    const id=tiktokReference[1];let item=null;
+    try { const data=JSON.parse(document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__')?.textContent || '{}');item=data.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct; } catch (_) {}
+    if (!item || String(item.id)!==id) try {item=JSON.parse(document.getElementById('SIGI_STATE')?.textContent || '{}').ItemModule?.[id];} catch (_) {}
+    if (item && String(item.id)===id) {
+      const caption=text(item.desc);const author=text(item.author?.nickname || item.author?.uniqueId || 'TikTok');
+      title=text(caption ? caption+' | '+author : author+'的 TikTok 视频').slice(0,180);description=caption.slice(0,500);
+      const video=item.video || {};image=video.originCover || video.cover || video.dynamicCover || image;
+      const addVariant=(value,width,height,bitrate,frameRate)=>add(value,'video',{tiktok_id:id,width:Number(width)||0,height:Number(height)||0,bitrate:Number(bitrate)||0,frame_rate:frameRate || 0,quality:width&&height?width+'×'+height:'原始画质'});
+      for (const variant of (video.bitrateInfo || video.bitRateInfo || []).slice(0,20)) {
+        const address=variant.PlayAddr || {};for(const value of (address.UrlList || []).slice(0,4))addVariant(value,address.Width,address.Height,variant.Bitrate,variant.BitrateFPS);
+      }
+      for (const key of ['PlayAddrStruct','playAddr','downloadAddr']) {
+        const address=video[key];if(typeof address==='string')addVariant(address,video.width,video.height,video.bitrate,0);
+        else if(address)for(const value of (address.UrlList || []).slice(0,4))addVariant(value,address.Width || video.width,address.Height || video.height,video.bitrate,0);
+      }
+      candidates.sort((a,b)=>(b.width||0)*(b.height||0)-(a.width||0)*(a.height||0)||(b.bitrate||0)-(a.bitrate||0));
+    }
+  }
   let imageData = '';
   if (image) {
     const node = [...document.images].find(node => (node.currentSrc || node.src) === image && node.naturalWidth);
@@ -43,7 +63,7 @@ function linkExpandPage(play = false) {
       imageData = canvas.toDataURL('image/jpeg', 0.85);
     } catch (_) {}
   }
-  if (!image) {
+  if (!imageData) {
     const video = [...document.querySelectorAll('video')].find(node => node.videoWidth && node.readyState >= 2);
     if (video) try {
       const canvas = document.createElement('canvas');

@@ -150,6 +150,11 @@ def resolve(url, headers=None, scan=False):
                 video['kind']='video'
                 for variant in video['variants']:variant['headers']={'Referer':'https://x.com/'}
             return {'source':url,'title':preview.title,'resources':preview.videos}
+    from .tiktok import post_reference as tiktok_reference, parse_resource
+    if tiktok_reference(url):
+        from .metadata import fetch_resource,MAX_IMAGE
+        preview=parse_resource(fetch_resource(url,MAX_IMAGE,headers=headers))
+        if preview.videos:return {'source':preview.url,'title':preview.title,'resources':preview.videos}
     inspected=inspect_resource(url,headers,url)
     source=inspected['url']
     if inspected['kind']:
@@ -203,6 +208,9 @@ def resolve(url, headers=None, scan=False):
 
 def imported_candidates(source,candidates):
     source=resource_url(source)
+    from .tiktok import browser_video
+    tiktok=browser_video(source,candidates)
+    if tiktok:return {'source':source,'title':'TikTok 视频','resources':[tiktok]}
     resources=[];seen=set()
     for item in candidates[:64]:
         if not isinstance(item,dict):continue

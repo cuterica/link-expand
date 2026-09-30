@@ -388,7 +388,7 @@ class DownloadJob:
         for variant in sorted(self.video['variants'], key=quality_rank, reverse=True):
             self.check_stop()
             try:
-                candidate = probe_video(variant['url'],self.request_headers(variant),self.video.get('credential_origin') or self.source,transport=self.transport)
+                candidate = probe_video(variant['url'],self.request_headers(variant),self.credential_scope(variant),transport=self.transport)
             except (OSError, http.client.HTTPException, PreviewError) as error:
                 last_error = error
                 continue
@@ -420,6 +420,10 @@ class DownloadJob:
         headers=dict(variant.get('headers') or {})
         if not headers and not self.video.get('kind'):headers['Referer']='https://x.com/'
         return headers
+
+    def credential_scope(self,variant=None):
+        variant=variant or self.selected_variant or {}
+        return variant.get('credential_origin') or self.video.get('credential_origin') or self.source
 
     def run_stream(self):
         from .streaming import stream_download
@@ -625,7 +629,7 @@ class DownloadJob:
             if self.asset['validator']:
                 headers['If-Range'] = self.asset['validator']
             try:
-                with self.part.open('r+b', buffering=0) as partial, open_video(self.asset['url'], headers,self.request_headers(),self.video.get('credential_origin') or self.source,transport=self.transport) as response:
+                with self.part.open('r+b', buffering=0) as partial, open_video(self.asset['url'], headers,self.request_headers(),self.credential_scope(),transport=self.transport) as response:
                     if response.status == 200:
                         raise RangeUnsupported('视频服务器不支持这次分段请求，改为单连接下载。')
                     expected = f'bytes {offset}-{request_end}/{self.asset["size"]}'
@@ -673,7 +677,7 @@ class DownloadJob:
             self.check_stop()
             try:
                 self.active_connections=1
-                with open_video(self.asset['url'],request_headers=self.request_headers(),credential_origin=self.video.get('credential_origin') or self.source,transport=self.transport) as response, self.part.open('wb') as partial:
+                with open_video(self.asset['url'],request_headers=self.request_headers(),credential_origin=self.credential_scope(),transport=self.transport) as response, self.part.open('wb') as partial:
                     length = response.getheader('Content-Length', '')
                     if length.isdigit() and self.exceeds_limit(int(length)):
                         raise PreviewError('视频超过 500 MB，已停止下载。')
@@ -725,6 +729,7 @@ class DownloadManager:
                 resource_url(data['source'])
                 for variant in data['video']['variants']:
                     resource_url(variant['url']);checked_headers(variant.get('headers'))
+                    if variant.get('credential_origin'):resource_url(variant['credential_origin'])
                     checked_headers(variant.get('audio_headers'))
                     if variant.get('audio_url'):resource_url(variant['audio_url'])
                 stream=data.get('stream_state') or {}

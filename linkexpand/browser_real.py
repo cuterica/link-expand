@@ -67,6 +67,8 @@ def session_cookies(url, headers):
 
 async def expand(url, session=None, *, profile=None, executable=None, timeout=50, extra_args=None):
     url = normalize_url(url)
+    from .tiktok import post_reference as tiktok_reference, media_host
+    tiktok=tiktok_reference(url)
     initial = urlsplit(url)
     await asyncio.to_thread(public_addresses, initial.hostname, initial.port or (443 if initial.scheme == 'https' else 80))
     profile = Path(profile or profile_directory()); profile.mkdir(parents=True, exist_ok=True)
@@ -123,10 +125,12 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
             while time.monotonic() < deadline:
                 try:
                     data = await page.evaluate(read_script + '\nlinkExpandPage(true)')
-                    if not data.get('error') and data.get('preview', {}).get('title'):
+                    ready=not tiktok or any(item.get('tiktok_id')==tiktok['id'] for item in data.get('candidates',[]))
+                    if not data.get('error') and data.get('preview', {}).get('title') and ready:
                         await page.wait_for_timeout(2500)
                         data = await page.evaluate(read_script + '\nlinkExpandPage(false)')
-                        if not data.get('error'): break
+                        media_ready=not tiktok or any(item['kind']=='video' and '/video/' in urlsplit(item['url']).path and media_host(item['url']) for item in resources.values())
+                        if not data.get('error') and media_ready: break
                 except BrowserError:
                     if page.is_closed(): raise PreviewError('真实浏览器窗口已关闭。')
                 await page.wait_for_timeout(1000)
@@ -135,6 +139,14 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
                 raise PreviewError(f'Playwright 已实际打开真实浏览器，网页仍拒绝本次访问{detail}。这不能证明你的日常浏览器也需要验证；请启用扩展读取已经正常打开的同一页面。')
             if tasks: await asyncio.gather(*list(tasks), return_exceptions=True)
             preview = data['preview']
+            if tiktok and preview.get('image_url') and not preview.get('image_data'):
+                try:
+                    from .metadata import fetch_resource,MAX_IMAGE
+                    cover=await asyncio.to_thread(fetch_resource,preview['image_url'],MAX_IMAGE,8,{'Referer':url,'User-Agent':'Mozilla/5.0'})
+                    mime=cover.content_type.split(';',1)[0]
+                    if mime in {'image/jpeg','image/png','image/webp'} and len(cover.body)<=2_000_000:
+                        preview.update(image_data='data:'+mime+';base64,'+base64.b64encode(cover.body).decode(),visual_source='TikTok 视频封面')
+                except PreviewError:pass
             if not preview.get('image_data'):
                 # Prefer the actual cover element, otherwise capture this same real page.
                 cover = page.locator('img')
@@ -151,16 +163,34 @@ async def expand(url, session=None, *, profile=None, executable=None, timeout=50
                                     found = True; break
                             except BrowserError: pass
                 if not found:
+                    for video in await page.locator('video').all():
+                        try:
+                            if await video.evaluate('node=>node.videoWidth>=200 && node.readyState>=2'):
+                                png=await video.screenshot(type='jpeg',quality=80,timeout=2500)
+                                preview.update(image_data='data:image/jpeg;base64,'+base64.b64encode(png).decode(),visual_source='真实浏览器视频画面')
+                                found=True;break
+                        except BrowserError:pass
+                if not found:
                     png = await page.screenshot(type='jpeg', quality=75, timeout=5000)
                     preview.update(image_data='data:image/jpeg;base64,' + base64.b64encode(png).decode(), visual_source='真实浏览器网页截图')
             items = {item['url']: item for item in data.get('candidates', [])}
-            items.update(resources)
+            for address,item in resources.items():items[address]={**items.get(address,{}),**item}
+            if tiktok:
+                agent=await page.evaluate('navigator.userAgent')
+                for address,item in items.items():
+                    if item.get('tiktok_id')!=tiktok['id'] or not media_host(address):continue
+                    headers={key:value for key,value in (item.get('headers') or {}).items() if key.lower() not in {'cookie','user-agent','referer','origin'}}
+                    headers.update({'User-Agent':agent,'Referer':url,'Origin':'https://www.tiktok.com'})
+                    cookies=await context.cookies([address]) if urlsplit(address).scheme=='https' else []
+                    if cookies:headers['Cookie']='; '.join(cookie['name']+'='+cookie['value'] for cookie in cookies)
+                    item['headers']=headers
+                items={address:item for address,item in items.items() if item.get('tiktok_id')==tiktok['id']}
             declared = {item['url'] for item in data.get('candidates', [])}
             candidates = [item for item in items.values() if not re.search(r'\.ts(?:[?#]|$)', item['url'], re.I)
                           and (not re.search(r'\.m4s(?:[?#]|$)', item['url'], re.I) or item['url'] in declared
                                or (urlsplit(item['url']).hostname or '').endswith('.bilivideo.com'))]
             videos = [item for item in candidates if item['kind'] == 'video']; audios = [item for item in candidates if item['kind'] == 'audio']
-            if videos and audios:
+            if videos and audios and not tiktok:
                 candidates = [videos[0], audios[0]] + [item for item in candidates if item['kind'] in {'hls', 'dash'}]
             return {'source': preview['url'], 'preview': preview, 'candidates': candidates[:64], 'method': 'playwright-visible'}
         finally:
