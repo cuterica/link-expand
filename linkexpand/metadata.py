@@ -341,6 +341,8 @@ def get_preview(url: str) -> Preview:
         return preview
     from .tiktok import post_reference as tiktok_reference, parse_resource
     if tiktok_reference(resource.url):return parse_resource(resource)
+    from .douyin import post_reference as douyin_reference,parse_resource as parse_douyin
+    if douyin_reference(resource.url):return parse_douyin(resource)
     return extract_metadata(resource)
 
 

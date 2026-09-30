@@ -511,3 +511,44 @@ async function refreshQueue() {
   }catch(error){videoError(error.message);}
 }
 $('queue-refresh').addEventListener('click',refreshQueue);
+
+let updateAvailable=false;
+let updating=false;
+$('update-button').addEventListener('click',async()=>{
+  if(updating)return;
+  const button=$('update-button');button.disabled=true;
+  try {
+    if(!updateAvailable){
+      button.textContent='检查中…';const result=await api('/api/update/check',{});
+      if(result.available&&result.supported){updateAvailable=true;button.textContent='更新到 v'+result.latest_version;toast('发现新版，点击更新即可下载、安装并重启。');}
+      else if(result.available){button.textContent='检查更新';toast('发现 v'+result.latest_version+'；分发版支持一键更新。');}
+      else {button.textContent='检查更新';toast('当前已是最新版。');}
+      return;
+    }
+    updating=true;button.textContent='下载新版…';await api('/api/update/download',{});
+    while(true){
+      await new Promise(resolve=>setTimeout(resolve,700));
+      const response=await fetch('/api/update/status',{headers:{'X-Local-Token':token}});const result=await response.json();
+      if(!response.ok||result.state==='error')throw new Error(result.error||'更新失败，请重试。');
+      if(result.state==='ready')break;
+      button.textContent='下载新版 '+Math.round((result.progress||0)*100)+'%';
+    }
+    button.textContent='正在安装并重启…';await api('/api/update/apply',{});
+    if(!nativeShell){
+      for(let attempt=0;attempt<120;attempt++){
+        await new Promise(resolve=>setTimeout(resolve,1000));
+        try {
+          const response=await fetch('/api/health',{cache:'no-store'});const result=await response.json();
+          if(response.ok&&result.version!==expectedVersion){location.reload();return;}
+          if(response.ok){
+            const fresh=await fetch('/',{cache:'no-store'}).then(value=>value.text());
+            const session=fresh.match(/name="local-token" content="([^"]+)"/);
+            if(session&&session[1]!==token){location.reload();return;}
+          }
+        } catch(_){}
+      }
+      throw new Error('重启尚未完成，请稍后刷新页面。');
+    }
+  } catch(error){updating=false;button.textContent='重试更新';toast(error.message);}
+  finally {button.disabled=updating;}
+});

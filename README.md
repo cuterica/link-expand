@@ -6,21 +6,29 @@
 
 ## Windows 免安装软件
 
-在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.63)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
+在 [Releases 下载 Windows 版](https://github.com/cuterica/link-expand/releases/tag/v0.4.0)。下载 EXE 直接运行，或下载 ZIP 解压后运行其中的 EXE，无需安装 Python。
 
 分发版使用本项目原有的本地网页界面和处理流程。启动后自动打开浏览器，粘贴 URL 即可自动展开。截图使用电脑中已安装的 Edge 或 Chrome；不附带浏览器，以减小分发体积。
 
-使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.3.63-Windows-x64.exe --port 8766`。
+使用期间保留启动窗口，退出时关闭它或按 Ctrl+C。默认地址为 <http://127.0.0.1:8765>。同版本已运行时，再次启动会打开原来的页面；旧版本或其他程序占用端口时，新版会选择空闲端口并打开自己的页面，避免接入旧后台。需要指定其他端口时，在命令行运行 `LinkExpand-0.4.0-Windows-x64.exe --port 8766`。
 
-页面右上角显示 `v0.3.63`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
+页面右上角显示 `v0.4.0`，右侧按钮为「复制图文与链接」，下方为「通用下载」区域。页面会核对后台版本；旧后台或版本不匹配时会明确提示，并禁用对应功能。
 
 每个发布版本提供 `SHA256SUMS.txt`，可验证下载文件。ZIP 内附第三方组件许可证。软件尚未进行商业代码签名。
 
+## 软件内更新
+
+v0.4.0 起，页面顶部提供「检查更新」。发现新版本后，按钮变为「更新到 v…」；再次点击即可在软件内下载、校验、安装并重启，后续无需手动打开 GitHub 下载。
+
+Windows 替换当前运行的 EXE，Mac 替换当前 `.app`。更新前暂停下载并保存进度，重新打开后可继续任务；安装或启动失败时保留旧程序并回退。数据目录、浏览器配对和已下载文件继续使用原来的位置。更新包取自本项目正式 GitHub Release，并校验文件大小与 SHA-256；不会要求安装 Git、GitHub CLI 或 Python。
+
+已有更早版本没有更新按钮，需要先运行一次含此功能的 v0.4.0 新包。源码运行可检查版本；一键替换适用于 Windows / Mac 分发程序。
+
 ## macOS 免安装软件
 
-[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.3.63)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
+[下载 Apple Silicon Mac 版](https://github.com/cuterica/link-expand/releases/tag/v0.4.0)。在真实的 Mac mini（arm64）上验证，ZIP 内含 `LinkExpand.app`、使用说明与 Chrome 捕获扩展。解压后双击应用，或拖到应用程序文件夹，无需 Python。双击直接打开 Mac 原生 WebKit 窗口，沿用原有卡片和下载界面；支持系统菜单和 Command+C/V/Q。左侧复制卡片提供原生 PNG，右侧提供 RTFD 图文与可点击链接，文件复制使用原生 NSURL。图片和另存文件保存到 `~/Downloads/LinkExpand-exports`，已有同名文件保留。
 
-Mac 版本显示 `v0.3.63`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
+Mac 版本显示 `v0.4.0`。截图优先使用系统或用户应用程序目录中已有的 Chrome / Chromium；未安装时，可在 Link Expand 菜单安装独立截图组件。程序不附带浏览器，也不更改默认浏览器。源代码同样支持寻找已安装的 Edge，未自动安装它。
 
 Mac 图文复制提供 RTFD（内嵌 PNG、文字和真实链接）、HTML、PNG 和纯文本。完整文件复制使用 macOS 原生文件 URL，可粘贴到支持文件粘贴的聊天软件或 Finder；实际呈现方式由接收软件决定。缓存图片位于 `~/Library/Application Support/LinkExpand/clipboard`。
 
@@ -135,6 +143,7 @@ Playwright 回退使用安装的 Windows Edge / Mac Chrome，以浏览器自己�
 | --- | --- | --- |
 | **X / Twitter** | 标题、摘要、封面；公开推文完整视频下载；文件复制 | [官方开发者推文](https://x.com/TwitterDev/status/1460323737035677698)：完整 MP4，1280×720，11.093 秒，含音视频。仅验证公开样例，未验收私密推文、直播、订阅内容 |
 | **哔哩哔哩** | 标题、摘要、封面；完整 MP4；Windows / Mac 实际窗口、暂停、退出重开续传、文件接收与另存 | [BV1cSec6tEux](https://www.bilibili.com/video/BV1cSec6tEux/)：140,922,591 字节，1280×590，1631.296 秒，含音视频。使用可关闭的第三方公开链接解析回退，未证明匿名真实浏览器可以绕过 412，也未验收会员／付费内容 |
+| **中国抖音** | 精选页 modal_id / 视频链接；说明、真实封面；最高可用画质完整下载 | [匿名验收样例](https://www.douyin.com/jingxuan?modal_id=7686432847778982833)：Windows / Mac 分发包未登录状态走通，2560×1440，65.683333 秒，14,622,934 字节，HEVC + AAC；只验证此样例与当时地区会话 |
 | **TikTok** | 视频说明、真实封面；页面播放会话；最高可用清晰度的完整视频下载 | [@lianaparmezana 的验收视频](https://www.tiktok.com/@lianaparmezana/video/7669725994743336199)：1080×1440，14.790998 秒，2,628,739 字节，HEVC + AAC。Windows / Mac 分发包实际界面通过；不代表所有地区、登录受限内容或全部 TikTok 视频均通过 |
 | **GitHub** | 公开主页标题、摘要、网页封面及卡片生成 | [github.com](https://github.com/)；这项验收是网页预览，未把 GitHub 视频或整个仓库下载列为已验证 |
 | **MDN 示例媒体** | 视频截图、直接 MP4 资源识别、完整文件下载与校验 | [flower.mp4](https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4)；验证直链视频，不代表所有 MDN 网页均需或支持视频下载 |
@@ -160,7 +169,7 @@ Vimeo 候选判断参考其[官方视频文件链接说明](https://developer.vi
 
 ### 还不能算已适配的平台
 
-**YouTube、抖音、快手、Instagram、Facebook、小红书、爱奇艺、腾讯视频、优酷、Netflix** 尚未做对应网站全流程验收，也没有这些网站的专用解析器。可以尝试网页预览或在正常浏览器中捕获可用资源，但不能承诺输入页面链接就能下载完整视频。签名、登录、页面接口、分离音视频和播放保护需要分别处理；DRM、无结束的直播与私有播放协议不在当前通用下载范围内。
+**YouTube、快手、Instagram、Facebook、小红书、爱奇艺、腾讯视频、优酷、Netflix** 尚未做对应网站全流程验收，也没有这些网站的专用解析器。可以尝试网页预览或在正常浏览器中捕获可用资源，但不能承诺输入页面链接就能下载完整视频。签名、登录、页面接口、分离音视频和播放保护需要分别处理；DRM、无结束的直播与私有播放协议不在当前通用下载范围内。
 
 无限制模式自动选的是**已经识别到的版本中**最大分辨率、最高可用画质；如果第三方接口或网站只给了一个低清版本，软件不会自动产生或恢复未提供的高清版本。
 
@@ -235,3 +244,8 @@ v0.3.6 使用真实 Windows 系统上的分发 EXE 和独立可见浏览器，�
 ## 下载大小与最高画质验收
 
 v0.3.61 新增 500 MB / 无限制切换，Windows 与 Mac 实测超过 500 MB 的下载、重启续传、导出和原生文件复制；分发包另实际走通无限制选择及真实视频的完整界面链路。详见 [下载大小与画质报告](DOWNLOAD-LIMIT-TEST-REPORT.md)，验证附件为 `download-validation-v0.3.61.zip`。
+
+
+## 抖音与内置更新验收
+
+v0.4.0 在真实 Windows 与 Mac 分发程序中验证匿名抖音样例，同时验证更新按钮、实际 GitHub 安装包下载及校验、独立安装器替换程序并重启。详见 [抖音与更新验收报告](DOUYIN-UPDATE-TEST-REPORT.md)。

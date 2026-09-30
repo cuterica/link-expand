@@ -53,6 +53,22 @@ function linkExpandPage(play = false) {
       candidates.sort((a,b)=>(b.width||0)*(b.height||0)-(a.width||0)*(a.height||0)||(b.bitrate||0)-(a.bitrate||0));
     }
   }
+  const douyinReference=/^(?:[\w-]+\.)*douyin\.com$/i.test(location.hostname) && (location.pathname.match(/\/video\/(\d{10,24})/)?.[1] || new URL(location.href).searchParams.get('modal_id'));
+  if(douyinReference){
+    let root=null;try{root=JSON.parse(decodeURIComponent(document.getElementById('RENDER_DATA')?.textContent || '{}'));}catch(_){}
+    const find=(value,depth=0)=>{if(depth>16||!value||typeof value!=='object')return null;if(String(value.awemeId || value.aweme_id)===douyinReference&&value.video)return value;for(const child of Object.values(value).slice(0,200)){const item=find(child,depth+1);if(item)return item;}return null;};
+    const item=find(root || window._ROUTER_DATA);
+    if(item){
+      description=text(item.desc || item.itemTitle).slice(0,500);title=(description || '抖音视频').slice(0,180);
+      const video=item.video || {};image=video.originCover || video.cover || image;
+      const urls=value=>typeof value==='string'?[value]:Array.isArray(value)?value.slice(0,4).map(item=>typeof item==='string'?item:item.src):value?.urlList || value?.url_list || [];
+      for(const variant of (video.bitRateList || video.bit_rate || []).slice(0,40)){
+        if(variant.audioFileId)continue;
+        for(const address of urls(variant.playAddr || variant.play_addr))add(address,'video',{douyin_id:douyinReference,width:Number(variant.width)||0,height:Number(variant.height)||0,bitrate:Number(variant.bitRate || variant.bit_rate)||0,frame_rate:variant.fps || 0,quality:variant.width+'×'+variant.height});
+      }
+      candidates.sort((a,b)=>(b.width||0)*(b.height||0)-(a.width||0)*(a.height||0)||(b.bitrate||0)-(a.bitrate||0));
+    }
+  }
   let imageData = '';
   if (image) {
     const node = [...document.images].find(node => (node.currentSrc || node.src) === image && node.naturalWidth);

@@ -50,6 +50,8 @@ class App:
         self.bridge_token = pairing_key()
         self.real_browser_slot = threading.BoundedSemaphore(1)
         self.native_ui=None
+        self._updater=None
+        self.restart_args=[]
 
     def real_browser(self,url,session=None):
         if not self.real_browser_slot.acquire(blocking=False):
@@ -157,11 +159,20 @@ class App:
                 self._downloads = DownloadManager()
             return self._downloads
 
+    @property
+    def updater(self):
+        with self.lock:
+            if self._updater is None:
+                from .updater import Updater
+                self._updater=Updater()
+            return self._updater
+
     def close(self):
         from .owned_process import stop_workers
         stop_workers()
         if self._downloads:
             self._downloads.close()
+        if self._updater:self._updater.close()
 
     def put(self, preview, cover=None, visual=None):
         png = render_card(preview, cover)
@@ -214,7 +225,8 @@ class App:
                     raise PreviewError(f'{first_error} 自动回退结果：{second_error}') from None
             attach_visual(preview)
             from .tiktok import post_reference as tiktok_reference
-            if tiktok_reference(preview.url) and preview.videos:
+            from .douyin import post_reference as douyin_reference
+            if (tiktok_reference(preview.url) or douyin_reference(preview.url)) and preview.videos:
                 from .video_downloads import probe_video
                 variant=preview.videos[0]['variants'][0]
                 try:probe_video(variant['url'],variant.get('headers'),variant.get('credential_origin'))
@@ -225,7 +237,7 @@ class App:
                             answer=dict(result['preview']);answer['catalog']=result['catalog'];return answer
                     except PreviewError as error:preview.warnings.append(str(error))
                     preview.videos=[];preview.selected_video=None
-                    preview.warnings.append('TikTok 视频地址需要当前浏览器会话；请重试或启用浏览器联动。')
+                    preview.warnings.append('视频地址需要当前浏览器会话；请重试或启用浏览器联动。')
             visual = original_visual(preview)
             preview.image = visual
             cover = thumbnail(preview)
@@ -358,6 +370,8 @@ class Handler(BaseHTTPRequestHandler):
             except PreviewError as error:self.respond_json(404,{'error':str(error)})
         elif path == '/api/health':
             self.respond_json(200, {'app': 'link-expand', 'version': __version__})
+        elif path=='/api/update/status':
+            if self.authenticated():self.respond_json(200,app.updater.status())
         elif path=='/api/capture/preview':
             if not self.authenticated():return
             try:
@@ -431,7 +445,19 @@ class Handler(BaseHTTPRequestHandler):
                 raise PreviewError("请求格式有误。")
             app = self.server.app
             path = urlsplit(self.path).path
-            if path=='/api/browser/request':
+            if path=='/api/update/check':result=app.updater.check()
+            elif path=='/api/update/download':result=app.updater.download()
+            elif path=='/api/update/apply':
+                result=app.updater.apply(self.server.server_port,app.restart_args)
+                def restart():
+                    __import__('time').sleep(.4)
+                    app.close()
+                    if app.native_ui:
+                        from PyObjCTools import AppHelper
+                        AppHelper.callAfter(app.native_ui.stop)
+                    else:self.server.shutdown()
+                threading.Thread(target=restart,name='LinkExpand-update-restart',daemon=True).start()
+            elif path=='/api/browser/request':
                 result=app.bridge.request(str(data.get('url','')),data.get('bili_parser') is not False)
             elif path=='/api/browser/cancel':
                 result=app.bridge.cancel(str(data.get('id','')))
@@ -451,7 +477,8 @@ class Handler(BaseHTTPRequestHandler):
                         if not isinstance(candidates,list):raise PreviewError('媒体资源格式无效。')
                         from .media_resolver import imported_candidates
                         from .tiktok import post_reference as tiktok_reference,browser_video
-                        if tiktok_reference(source) and not browser_video(source,candidates):
+                        from .douyin import post_reference as douyin_reference,browser_video as douyin_video
+                        if (tiktok_reference(source) and not browser_video(source,candidates)) or (douyin_reference(source) and not douyin_video(source,candidates)):
                             result=app.fallback_job(key,client,data.get('session'))
                             self.respond_json(200,result);return
                         catalog=None
@@ -526,13 +553,14 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         resolved=resolve(url,data.get('headers'),data.get('scan') is True)
                         from .tiktok import post_reference as tiktok_reference
-                        if tiktok_reference(url):
+                        from .douyin import post_reference as douyin_reference
+                        if tiktok_reference(url) or douyin_reference(url):
                             from .video_downloads import probe_video
                             variant=resolved['resources'][0]['variants'][0]
                             try:probe_video(variant['url'],variant.get('headers'),variant.get('credential_origin'))
                             except PreviewError:
                                 recovered=app.real_browser(url)
-                                if not recovered.get('catalog'):raise PreviewError('TikTok 浏览器会话尚未取得视频地址，请重试。')
+                                if not recovered.get('catalog'):raise PreviewError('浏览器会话尚未取得目标视频地址，请重试。')
                                 result=recovered['catalog']
                             else:result=app.catalog(resolved)
                         else:result=app.catalog(resolved)
@@ -627,6 +655,9 @@ def main():
     parser.add_argument('--test-downloads-root',type=Path,help=argparse.SUPPRESS)
     args = parser.parse_args()
     app = App()
+    if args.ui_test:
+        app.restart_args=['--ui-test']
+        if args.test_downloads_root:app.restart_args+=['--test-downloads-root',str(args.test_downloads_root)]
     if args.test_downloads_root:
         if not args.ui_test:parser.error('--test-downloads-root requires --ui-test')
         app._downloads=DownloadManager(args.test_downloads_root)

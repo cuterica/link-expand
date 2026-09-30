@@ -155,6 +155,11 @@ def resolve(url, headers=None, scan=False):
         from .metadata import fetch_resource,MAX_IMAGE
         preview=parse_resource(fetch_resource(url,MAX_IMAGE,headers=headers))
         if preview.videos:return {'source':preview.url,'title':preview.title,'resources':preview.videos}
+    from .douyin import post_reference as douyin_reference,parse_resource as parse_douyin
+    if douyin_reference(url):
+        from .metadata import fetch_resource,MAX_IMAGE
+        preview=parse_douyin(fetch_resource(url,MAX_IMAGE,headers=headers))
+        if preview.videos:return {'source':preview.url,'title':preview.title,'resources':preview.videos}
     inspected=inspect_resource(url,headers,url)
     source=inspected['url']
     if inspected['kind']:
@@ -211,6 +216,9 @@ def imported_candidates(source,candidates):
     from .tiktok import browser_video
     tiktok=browser_video(source,candidates)
     if tiktok:return {'source':source,'title':'TikTok 视频','resources':[tiktok]}
+    from .douyin import browser_video as douyin_video
+    douyin=douyin_video(source,candidates)
+    if douyin:return {'source':source,'title':'抖音视频','resources':[douyin]}
     resources=[];seen=set()
     for item in candidates[:64]:
         if not isinstance(item,dict):continue

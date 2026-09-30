@@ -1,4 +1,4 @@
-# TikTok 链接验收：v0.3.63
+# TikTok 链接验收：v0.4.0
 
 样例：https://www.tiktok.com/@lianaparmezana/video/7669725994743336199
 
@@ -13,13 +13,13 @@ Cookie 仅针对当前 TikTok 媒体地址读取和传递，不写入下载任�
 - Windows 分发 EXE：在真实可见浏览器中输入样例，显示 `I’m back…` 说明和 Liana 标题、真实封面、一个按画质排序的视频选项；实际导出封面 PNG；点击下载后取得完整 MP4；正常退出。
 - Mac 分发应用：在真实 Mac mini 原生窗口中输入样例，显示说明与封面并完成完整视频下载，正常退出。
 - 两个系统的成品均为 **2,628,739 字节、1080×1440、14.790998 秒，HEVC 视频 + AAC 音频**。完整下载 SHA-256 一致。
-- 108 项单元测试通过，包含目标视频 ID 校验、旧／新数据结构、最大分辨率、无关动画过滤、多版本合并、标题成功但媒体 403 时仍自动回退。
+- 119 项单元测试通过，包含目标视频 ID 校验、旧／新数据结构、最大分辨率、无关动画过滤、多版本合并、标题成功但媒体 403 时仍自动回退。
 - 浏览器扩展请求捕获回归通过。
 
 ```text
 ba6cebf82b9c126c21630db3aad2d423cf497fac5ac9c19cba73464760fbe266
 ```
 
-实测脚本：`tests/tiktok_windows_ui.py`、`tests/tiktok_macos_ui.py`。验证附件 `TikTok-validation-v0.3.63.zip` 包含实际界面截图、日志和本报告，不包含视频、播放 Cookie 或签名地址。
+实测脚本：`tests/tiktok_windows_ui.py`、`tests/tiktok_macos_ui.py`。验证附件 `TikTok-validation-v0.4.0.zip` 包含实际界面截图、日志和本报告，不包含视频、播放 Cookie 或签名地址。
 
 测试代表这条公开视频及当前地区会话，不代表全部 TikTok 内容或地区均可用。涉及登录、验证码、地域限制或失效地址时，仍会显示原因。
